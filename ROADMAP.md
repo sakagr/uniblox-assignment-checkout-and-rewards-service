@@ -18,11 +18,11 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 3 | Set up the database | n/a | ✅ Done |
 | 4 | Build the app foundation | 45 min | ✅ Done |
 | 5 | Products and carts | 40 min | ✅ Done |
-| 6 | Checkout quote | 30 min | ⬜ |
+| 6 | Checkout quote | 30 min | ✅ Done |
 | 7 | Place orders (confirm checkout) | 75 min | ⬜ |
 | 8 | Admin coupons and order list | 30 min | ⬜ |
 | 9 | Admin report | 20 min | ⬜ |
-| 10 | Harden with concurrency tests | 40 min | ⬜ |
+| 10 | Harden with concurrency tests | 50 min | ⬜ |
 | 11 | Write the README and API docs | 30 min | ⬜ |
 | 12 | Finish DECISIONS.md | 30 min | ⬜ |
 | 13 | Final check and submit | 15 min | ⬜ |
@@ -103,17 +103,17 @@ Let a client list products, create a cart, and set or remove item quantities.
   - Parallel PUTs for all 6 products on one cart give 6 lines and `version` exactly 6
 - [x] Committed
 
-## 6. Checkout quote
+## 6. Checkout quote ✅
 
 Price a cart (with an optional coupon) and store the quote without changing stock, coupons or the cart.
 
 **Done when**
-- [ ] `POST /carts/:cartId/checkout/quote` runs in REPEATABLE READ (§6.2)
-- [ ] Rejects a missing cart (404), a checked-out cart (409), an empty cart (422), an unknown coupon (422), a redeemed coupon (409), and short stock (409 with every short line)
-- [ ] Coupon code trimmed and uppercased; totals from `calculateTotals()`
-- [ ] `checkout_quotes` and `quote_lines` rows stored; response matches the §5.2 Quote shape
-- [ ] Test: a quote mutates nothing (stock, coupon, cart status and version unchanged)
-- [ ] Committed
+- [x] `POST /carts/:cartId/checkout/quote` runs in REPEATABLE READ (§6.2)
+- [x] Rejects a missing cart (404), a checked-out cart (409), an empty cart (422), an unknown coupon (422), a redeemed coupon (409), and short stock (409 with every short line)
+- [x] Coupon code trimmed and uppercased; totals from `calculateTotals()`
+- [x] `checkout_quotes` and `quote_lines` rows stored; response matches the §5.2 Quote shape
+- [x] Test: a quote mutates nothing (stock, coupon, cart status and version unchanged)
+- [x] Committed
 
 ## 7. Place orders (confirm checkout)
 
@@ -165,11 +165,26 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
 
 **Done when**
 - [ ] Invariant checker (T15) in `test/helpers.ts`, run at the end of every concurrency test
+- [ ] `waitForLockWaiters(pool, n)` in `test/helpers.ts`:
+  - polls `pg_stat_activity` until `n` backends have `wait_event_type = 'Lock'`, with a timeout
+  - lets race tests set up an exact interleaving instead of sleeping
+  - if task 7 needs it first, build it there and tick this item then
 - [ ] Tests pass:
   - T13: 20 parallel confirms with n = 5 give placement numbers 1..20 with no gaps, and exactly 4 coupons on orders 5/10/15/20
-- [ ] Sanity check, done locally and not committed:
-  - temporarily remove one guard (e.g. `AND stock >= $qty`, or the under-lock price check), confirm a test fails, then restore it
-  - note which test caught it, for DECISIONS §10
+  - **Cart lock (I4), deterministic:**
+    - a separate connection opens a transaction, locks the cart `FOR UPDATE`, and sets it to `CHECKED_OUT` (simulating an in-flight confirm)
+    - a `PUT` on that cart is started and confirmed blocked with `waitForLockWaiters`
+    - the blocker commits; the `PUT` returns 409 `CART_ALREADY_CHECKED_OUT` and the line is unchanged
+    - why this test exists: the task 5 parallel-PUT test passes even without the cart lock (the version increment is atomic and different products don't conflict), so it doesn't prove I4
+  - `PUT` with `quantity: 0` on an unknown product returns 404 `PRODUCT_NOT_FOUND` (pins the documented PUT-0 vs DELETE asymmetry; DELETE returns a 200 no-op)
+- [ ] Fix the `bumpVersion` doc comment in `src/modules/carts/service.ts`: it bumps unconditionally, and the caller checks `rowCount`
+- [ ] Sanity checks, done locally and not committed. For each, break the guard, confirm the named test fails, then restore it:
+  - remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail
+  - remove `AND redeemed_order_id IS NULL` from the coupon redeem: T6 must fail (two orders carry the coupon)
+  - remove **both** stock defences in confirm (the under-lock stock check and `AND stock >= $qty`): T5 must fail; the `CHECK (stock >= 0)` turns the oversell into a 500 instead of a 409
+  - expect layered defences: removing only one stock defence is caught by the other, and nothing should fail. Record that as intended defence in depth, not as a test gap
+  - note which test caught each one, for DECISIONS §10
+- [ ] Record in DECISIONS §9, as an AI suggestion that was corrected: the parallel-PUT test proposed for task 5 did not test the cart lock it was meant to prove
 - [ ] Committed
 
 ## 11. Write the README and API docs

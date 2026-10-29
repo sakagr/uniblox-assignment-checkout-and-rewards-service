@@ -7,6 +7,7 @@ import type pg from 'pg';
 import type { Config } from './config.js';
 import { registerErrorHandling } from './http/error-handler.js';
 import { cartRoutes } from './modules/carts/routes.js';
+import { checkoutRoutes } from './modules/checkout/routes.js';
 import { productRoutes } from './modules/products/routes.js';
 
 type AjvPlugin = NonNullable<NonNullable<FastifyServerOptions['ajv']>['plugins']>[number];
@@ -59,6 +60,7 @@ export async function buildApp({ pool, logger = false }: AppDeps) {
 
   await app.register(productRoutes, { pool });
   await app.register(cartRoutes, { pool });
+  await app.register(checkoutRoutes, { pool });
 
   return app;
 }
