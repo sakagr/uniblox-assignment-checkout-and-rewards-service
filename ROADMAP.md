@@ -70,9 +70,9 @@ Add the shared building blocks every endpoint will use: config, database pool, t
 - [ ] `src/config.ts`: every §1 variable parsed and validated; bad values fail fast with the variable named
 - [ ] `src/db/pool.ts`: int8 and numeric parsed through one safe-integer parser (per-pool `types`, not global)
 - [ ] `src/db/tx.ts`: `withTransaction` with isolation and read-only options; a failed ROLLBACK destroys the client; lock-order comment (D9)
-- [ ] `src/domain/money.ts`: `Paise`, `paise()`, `calculateTotals()` (floor discount), `formatInr()`
-- [ ] `src/domain/coupon-code.ts`: Crockford base32 generator and `normalizeCouponCode()`
-- [ ] `src/domain/errors.ts`: a `DomainError` factory for every §5.4 code
+- [x] `src/domain/money.ts`: `Paise`, `paise()`, `calculateTotals()` (floor discount), `formatInr()`
+- [x] `src/domain/coupon-code.ts`: Crockford base32 generator and `normalizeCouponCode()`
+- [x] `src/domain/errors.ts`: a `DomainError` factory for every §5.4 code
 - [ ] `src/http/error-handler.ts`: envelope for domain errors, validation errors (400), transient pg errors (503) and unknown errors (500); `ROUTE_NOT_FOUND` for unknown routes, flagged for the spec
 - [ ] `src/app.ts`: `buildApp({ config, pool })` with swagger at `/docs`, `GET /health`, Ajv `coerceTypes: false` and `removeAdditional: false`
 - [ ] `src/server.ts`: listens on PORT; graceful shutdown on SIGINT and SIGTERM; `npm run dev` and `npm start` work
