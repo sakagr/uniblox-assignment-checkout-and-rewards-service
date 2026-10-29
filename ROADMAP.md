@@ -177,7 +177,7 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
   - lets race tests set up an exact interleaving instead of sleeping
   - if task 7 needs it first, build it there and tick this item then
 - [ ] Tests pass:
-  - [ ] T13: 20 parallel confirms with n = 5 give placement numbers 1..20 with no gaps, and exactly 4 coupons on orders 5/10/15/20
+  - [x] T13: 20 parallel confirms with n = 5 give placement numbers 1..20 with no gaps, and exactly 4 coupons on orders 5/10/15/20
   - [x] **Cart lock (I4), deterministic:**
     - a separate connection opens a transaction, locks the cart `FOR UPDATE`, and sets it to `CHECKED_OUT` (simulating an in-flight confirm)
     - a `PUT` on that cart is started and confirmed blocked with `waitForLockWaiters`
