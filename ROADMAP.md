@@ -68,8 +68,8 @@ Add the shared building blocks every endpoint will use: config, database pool, t
 
 **Done when**
 - [x] `src/config.ts`: every §1 variable parsed and validated; bad values fail fast with the variable named
-- [ ] `src/db/pool.ts`: int8 and numeric parsed through one safe-integer parser (per-pool `types`, not global)
-- [ ] `src/db/tx.ts`: `withTransaction` with isolation and read-only options; a failed ROLLBACK destroys the client; lock-order comment (D9)
+- [x] `src/db/pool.ts`: int8 and numeric parsed through one safe-integer parser (per-pool `types`, not global)
+- [x] `src/db/tx.ts`: `withTransaction` with isolation and read-only options; a failed ROLLBACK destroys the client; lock-order comment (D9)
 - [x] `src/domain/money.ts`: `Paise`, `paise()`, `calculateTotals()` (floor discount), `formatInr()`
 - [x] `src/domain/coupon-code.ts`: Crockford base32 generator and `normalizeCouponCode()`
 - [x] `src/domain/errors.ts`: a `DomainError` factory for every §5.4 code
