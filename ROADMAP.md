@@ -17,7 +17,7 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 2 | Set up the TypeScript project | n/a | ✅ Done |
 | 3 | Set up the database | n/a | ✅ Done |
 | 4 | Build the app foundation | 45 min | ✅ Done |
-| 5 | Products and carts | 40 min | ⬜ |
+| 5 | Products and carts | 40 min | ✅ Done |
 | 6 | Checkout quote | 30 min | ⬜ |
 | 7 | Place orders (confirm checkout) | 75 min | ⬜ |
 | 8 | Admin coupons and order list | 30 min | ⬜ |
@@ -87,20 +87,21 @@ Add the shared building blocks every endpoint will use: config, database pool, t
   - `"5"` rejected for an integer body field
 - [x] Committed in increments
 
-## 5. Products and carts
+## 5. Products and carts ✅
 
 Let a client list products, create a cart, and set or remove item quantities.
 
 **Done when**
-- [ ] `GET /products`
-- [ ] `POST /carts` (201 + `Location`), `GET /carts/:cartId` with current prices, line totals, `availableStock` and `sufficientStock`
-- [ ] `PUT /carts/:cartId/items/:productId` with absolute quantity 0..1000 (0 removes); soft stock check returns 409
-- [ ] `DELETE /carts/:cartId/items/:productId` (absent line is a 200 no-op)
-- [ ] Item edits lock the cart `FOR UPDATE`, reject a checked-out cart with 409, and bump `version` only when a row actually changed (§6.1)
-- [ ] Tests pass:
+- [x] `GET /products`
+- [x] `POST /carts` (201 + `Location`), `GET /carts/:cartId` with current prices, line totals, `availableStock` and `sufficientStock`
+- [x] `PUT /carts/:cartId/items/:productId` with absolute quantity 0..1000 (0 removes); soft stock check returns 409
+- [x] `DELETE /carts/:cartId/items/:productId` (absent line is a 200 no-op)
+- [x] Item edits lock the cart `FOR UPDATE`, reject a checked-out cart with 409, and bump `version` only when a row actually changed (§6.1)
+- [x] Tests pass:
   - T2: invalid input gives the right 400/404/409 code, and the cart is unchanged
   - T3: qty 0 removes; repeating the same PUT doesn't bump `version`
-- [ ] Committed
+  - Parallel PUTs for all 6 products on one cart give 6 lines and `version` exactly 6
+- [x] Committed
 
 ## 6. Checkout quote
 
@@ -125,6 +126,7 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
 - [ ] Coupon redeemed by conditional update; stock decremented by conditional update; counter incremented last
 - [ ] Order and line snapshots inserted; cart set to `CHECKED_OUT`; milestone coupon auto-generated with `ON CONFLICT (milestone) DO NOTHING` when enabled
 - [ ] `GET /orders/:orderId` returns the §5.2 Order shape, including `couponApplied` and `earnedCoupon`
+- [ ] After confirm, `GET /carts/{id}` returns `CHECKED_OUT` and `orderId` equal to the created order
 - [ ] Tests pass:
   - T4: 10 parallel confirms of one quote give one order
   - T5: oversell race on the stock-2 product
