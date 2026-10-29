@@ -2,6 +2,7 @@ import type pg from 'pg';
 import { normalizeCouponCode } from '../../domain/coupon-code.js';
 import { Errors, type StockShortfall } from '../../domain/errors.js';
 import { calculateTotals, paise } from '../../domain/money.js';
+import { loadCartItems } from '../carts/service.js';
 
 /**
  * SPECIFICATIONS §6.2. Must run in a REPEATABLE READ transaction so the cart
@@ -17,19 +18,8 @@ export async function createQuote(client: pg.PoolClient, cartId: string, couponC
   const { status, version } = cart.rows[0]!;
   if (status !== 'OPEN') throw Errors.cartAlreadyCheckedOut();
 
-  const items = await client.query<{
-    product_id: string;
-    quantity: number;
-    name: string;
-    unit_price_paise: number;
-    stock: number;
-  }>(
-    `SELECT ci.product_id, ci.quantity, p.name, p.unit_price_paise, p.stock
-       FROM cart_items ci JOIN products p ON p.id = ci.product_id
-      WHERE ci.cart_id = $1 ORDER BY ci.product_id`,
-    [cartId],
-  );
-  if (items.rows.length === 0) throw Errors.emptyCart();
+  const items = await loadCartItems(client, cartId);
+  if (items.length === 0) throw Errors.emptyCart();
 
   let coupon: { id: string; code: string; percent: number } | null = null;
   if (couponCode !== undefined) {
@@ -47,13 +37,13 @@ export async function createQuote(client: pg.PoolClient, cartId: string, couponC
   }
 
   // Advisory only (D3): report every short line, not just the first.
-  const shortfalls: StockShortfall[] = items.rows
+  const shortfalls: StockShortfall[] = items
     .filter((row) => row.quantity > row.stock)
     .map((row) => ({ productId: row.product_id, requested: row.quantity, available: row.stock }));
   if (shortfalls.length > 0) throw Errors.insufficientStock(shortfalls);
 
   const totals = calculateTotals(
-    items.rows.map((row) => ({
+    items.map((row) => ({
       productId: row.product_id,
       name: row.name,
       unitPricePaise: paise(row.unit_price_paise),

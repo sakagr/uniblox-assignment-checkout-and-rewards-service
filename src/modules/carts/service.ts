@@ -61,6 +61,25 @@ export async function removeItem(client: pg.PoolClient, cartId: string, productI
   if ((result.rowCount ?? 0) > 0) await bumpVersion(client, cartId);
 }
 
+export interface CartItemRow {
+  product_id: string;
+  quantity: number;
+  name: string;
+  unit_price_paise: number;
+  stock: number;
+}
+
+/** The cart's lines with the products' current name, price and stock, ordered by product id. */
+export async function loadCartItems(client: pg.PoolClient, cartId: string): Promise<CartItemRow[]> {
+  const { rows } = await client.query<CartItemRow>(
+    `SELECT ci.product_id, ci.quantity, p.name, p.unit_price_paise, p.stock
+       FROM cart_items ci JOIN products p ON p.id = ci.product_id
+      WHERE ci.cart_id = $1 ORDER BY ci.product_id`,
+    [cartId],
+  );
+  return rows;
+}
+
 export async function loadCartView(client: pg.PoolClient, cartId: string) {
   const cart = await client.query<{ id: string; status: 'OPEN' | 'CHECKED_OUT'; version: number; order_id: string | null }>(
     `SELECT c.id, c.status, c.version, o.id AS order_id
@@ -71,22 +90,11 @@ export async function loadCartView(client: pg.PoolClient, cartId: string) {
   if (cart.rows.length === 0) throw Errors.cartNotFound();
   const header = cart.rows[0]!;
 
-  const items = await client.query<{
-    product_id: string;
-    quantity: number;
-    name: string;
-    unit_price_paise: number;
-    stock: number;
-  }>(
-    `SELECT ci.product_id, ci.quantity, p.name, p.unit_price_paise, p.stock
-       FROM cart_items ci JOIN products p ON p.id = ci.product_id
-      WHERE ci.cart_id = $1 ORDER BY ci.product_id`,
-    [cartId],
-  );
+  const items = await loadCartItems(client, cartId);
 
   // Current prices, not snapshots (DECISIONS: cart shows live price and stock).
   const totals = calculateTotals(
-    items.rows.map((row) => ({
+    items.map((row) => ({
       productId: row.product_id,
       name: row.name,
       unitPricePaise: paise(row.unit_price_paise),

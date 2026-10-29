@@ -1,7 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { generateCouponCode } from '../src/domain/coupon-code.js';
-import { createTestApp, setupTestDb } from './helpers.js';
+import { createTestApp, insertCouponFixture, setupTestDb } from './helpers.js';
 
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
 
@@ -26,38 +24,6 @@ const cartWith = async (...lines: Array<[string, number]>): Promise<string> => {
   for (const [productId, qty] of lines) await putQty(cartId, productId, qty);
   return cartId;
 };
-
-let placement = 0;
-/** Inserts a cart + quote + order directly (orders are insert-only, so this is the only way to get one before task 7). */
-async function insertOrder(): Promise<string> {
-  const orderId = randomUUID();
-  const cart = await ctx.pool.query<{ id: string }>("INSERT INTO carts (status) VALUES ('CHECKED_OUT') RETURNING id");
-  const cartId = cart.rows[0]!.id;
-  const q = await ctx.pool.query<{ id: string }>(
-    `INSERT INTO checkout_quotes (cart_id, cart_version, subtotal_paise, discount_paise, total_paise)
-     VALUES ($1, 0, 100, 0, 100) RETURNING id`,
-    [cartId],
-  );
-  await ctx.pool.query(
-    `INSERT INTO orders (id, cart_id, quote_id, placement_number, subtotal_paise, discount_paise, total_paise)
-     VALUES ($1, $2, $3, $4, 100, 0, 100)`,
-    [orderId, cartId, q.rows[0]!.id, ++placement],
-  );
-  return orderId;
-}
-
-let milestone = 0;
-async function insertCoupon({ redeemed = false, percent = 10 } = {}): Promise<string> {
-  const code = generateCouponCode();
-  const milestoneOrderId = await insertOrder();
-  const redeemedBy = redeemed ? await insertOrder() : null;
-  await ctx.pool.query(
-    `INSERT INTO coupons (code, percent, milestone, milestone_order_id, source, redeemed_order_id, redeemed_at)
-     VALUES ($1, $2, $3, $4, 'ADMIN', $5, CASE WHEN $5::uuid IS NULL THEN NULL ELSE now() END)`,
-    [code, percent, ++milestone, milestoneOrderId, redeemedBy],
-  );
-  return code;
-}
 
 const quoteCount = async (cartId: string) =>
   Number((await ctx.pool.query('SELECT count(*) AS n FROM checkout_quotes WHERE cart_id = $1', [cartId])).rows[0].n);
@@ -122,7 +88,7 @@ describe('POST /carts/:cartId/checkout/quote', () => {
   });
 
   it('trims and uppercases the coupon code and floors the discount', async () => {
-    const code = await insertCoupon({ percent: 10 });
+    const code = await insertCouponFixture(ctx.pool, { percent: 10 });
     const cartId = await cartWith(['sku-sticker-pack', 1], ['sku-notebook', 1]); // 9900 + 19900 = 29800
     const sloppy = `  ${code.toLowerCase()}  `;
 
@@ -178,6 +144,14 @@ describe('POST /carts/:cartId/checkout/quote', () => {
     expect(await quoteCount(cartId)).toBe(0);
   });
 
+  it('reports an empty cart before an unknown coupon (check precedence)', async () => {
+    const cartId = await newCart();
+    const res = await quote(cartId, JSON.stringify({ couponCode: 'ZZZZZZZZZZZZ' }));
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('EMPTY_CART');
+    expect(await quoteCount(cartId)).toBe(0);
+  });
+
   it('422s an unknown or blank coupon', async () => {
     const cartId = await cartWith(['sku-mug', 1]);
     for (const couponCode of ['ZZZZZZZZZZZZ', '   ']) {
@@ -189,7 +163,7 @@ describe('POST /carts/:cartId/checkout/quote', () => {
   });
 
   it('409s a redeemed coupon', async () => {
-    const code = await insertCoupon({ redeemed: true });
+    const code = await insertCouponFixture(ctx.pool, { redeemed: true });
     const cartId = await cartWith(['sku-mug', 1]);
     const res = await quote(cartId, JSON.stringify({ couponCode: code }));
     expect(res.statusCode).toBe(409);
@@ -216,7 +190,7 @@ describe('POST /carts/:cartId/checkout/quote', () => {
   });
 
   it('mutates nothing: stock, prices, coupon and cart are unchanged', async () => {
-    const code = await insertCoupon();
+    const code = await insertCouponFixture(ctx.pool);
     const cartId = await cartWith(['sku-mug', 3], ['sku-limited-sneaker', 1]);
 
     const snapshot = async () => ({
