@@ -3,7 +3,7 @@
 Technical specification for the Checkout and Rewards Service. The rationale behind every choice lives in [`DECISIONS.md`](./DECISIONS.md). This file is the contract the implementation follows.
 
 **Stack:**
-- TypeScript, Node 20+
+- TypeScript, Node 20.12+ (`process.loadEnvFile`); the container image uses Node 22
 - Fastify, with TypeBox schemas and `@fastify/swagger`
 - PostgreSQL 16 via docker-compose, accessed with `pg` (no ORM)
 
@@ -349,6 +349,7 @@ Prices and stock are always the **current** values. `orderId` is set once the ca
 - **Response:** `201` with `{"coupon": Coupon, "pendingMilestones": <int>}`.
 - **Errors:** 409 `NO_ELIGIBLE_MILESTONE`, with details `{placedOrders, rewardedMilestones, nextMilestoneAtOrder}`.
 - **Semantics:** generates exactly one coupon, for the lowest reached milestone that has no coupon.
+- **Counts:** with `reached = floor(placedOrders / n)`, `rewardedMilestones` counts coupons with `milestone <= reached`, and `pendingMilestones = reached - rewardedMilestones` (after the insert). In normal operation that is every coupon; the bound keeps `pendingMilestones` from going negative if `n` changed between runs.
 
 #### `GET /admin/coupons?status=AVAILABLE|REDEEMED` (admin)
 - **Response:** `200` with `[Coupon]`, ordered by `milestone`.
@@ -498,14 +499,14 @@ Because the cart items are only modified under the cart lock (§6.1), the items 
 ### 6.4 Admin coupon generation, READ COMMITTED
 
 ```sql
-SELECT placed_orders FROM store_stats FOR UPDATE;            -- serializes with confirms; sees only committed orders
+SELECT placed_orders FROM store_stats FOR UPDATE;            -- serializes admin calls; waits for an in-flight confirm
 SELECT k FROM generate_series(1, $placed / $n) AS k          -- integer division
  WHERE NOT EXISTS (SELECT 1 FROM coupons c WHERE c.milestone = k)
  ORDER BY k LIMIT 1;                                          -- none → NO_ELIGIBLE_MILESTONE
 SELECT id FROM orders WHERE placement_number = $k * $n;       -- always exists (gapless counter)
 INSERT INTO coupons (code, percent, milestone, milestone_order_id, source)
 VALUES ($code, $x, $k, $orderId, 'ADMIN') RETURNING *;
--- pendingMilestones = (placed / n) - (count of coupons)
+-- pendingMilestones = (placed / n) - (count of coupons with milestone <= placed / n)
 ```
 
 ### 6.5 Report, REPEATABLE READ READ ONLY
@@ -562,7 +563,9 @@ A collision (`23505` on `coupons.code`) is astronomically unlikely. If it does h
 
 ```
 .
-├── docker-compose.yml          # postgres:16-alpine, creates checkout + checkout_test DBs
+├── Dockerfile                  # node:22-alpine; runs migrations, then the server, via tsx
+├── .dockerignore
+├── docker-compose.yml          # db (postgres:16-alpine, creates checkout + checkout_test) and app
 ├── migrations/
 │   ├── 001_schema.sql
 │   └── 002_seed.sql
