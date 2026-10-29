@@ -6,6 +6,7 @@ import Fastify, { type FastifyServerOptions } from 'fastify';
 import type pg from 'pg';
 import type { Config } from './config.js';
 import { registerErrorHandling } from './http/error-handler.js';
+import { productRoutes } from './modules/products/routes.js';
 
 type AjvPlugin = NonNullable<NonNullable<FastifyServerOptions['ajv']>['plugins']>[number];
 
@@ -54,6 +55,8 @@ export async function buildApp({ pool, logger = false }: AppDeps) {
       return { status: 'ok' as const };
     },
   );
+
+  await app.register(productRoutes, { pool });
 
   return app;
 }
