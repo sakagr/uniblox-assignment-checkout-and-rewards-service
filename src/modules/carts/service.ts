@@ -12,7 +12,10 @@ async function lockOpenCart(client: pg.PoolClient, cartId: string): Promise<void
   if (rows[0]!.status !== 'OPEN') throw Errors.cartAlreadyCheckedOut();
 }
 
-/** Bumps the version only when the preceding item statement actually changed a row (I12). */
+/**
+ * Bumps the version unconditionally. Callers call it only when the preceding item statement
+ * changed a row (`rowCount > 0`), which is what keeps a no-op edit from bumping it (I12).
+ */
 async function bumpVersion(client: pg.PoolClient, cartId: string): Promise<void> {
   await client.query('UPDATE carts SET version = version + 1, updated_at = now() WHERE id = $1', [cartId]);
 }

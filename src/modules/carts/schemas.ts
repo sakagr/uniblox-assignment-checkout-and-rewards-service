@@ -13,7 +13,7 @@ export const SetQuantityBody = Type.Object(
   { additionalProperties: false },
 );
 
-export const CartLine =Type.Object({
+export const CartLine = Type.Object({
   productId: Type.String(),
   name: Type.String(),
   unitPricePaise: Type.Integer(),

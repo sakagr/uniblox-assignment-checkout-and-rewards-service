@@ -127,9 +127,11 @@ export async function listOrders(pool: pg.Pool) {
 }
 
 /**
- * §6.5. Run in REPEATABLE READ READ ONLY: the three queries share one snapshot, so the figures
- * agree with each other (net = gross - discount, generated = available + redeemed). sum() and
- * count() arrive as numeric / int8 and go through the pool's safe-integer parser.
+ * §6.5. Run in REPEATABLE READ READ ONLY so the SEPARATE queries share one snapshot: productsSold
+ * matches the orders counted in placedOrders and gross, and the coupon counts match the discounted
+ * orders. net = gross - discount and generated = available + redeemed each come from one
+ * statement, so they hold at any isolation level. sum() and count() arrive as numeric / int8 and
+ * go through the pool's safe-integer parser.
  */
 export async function buildReport(client: pg.PoolClient) {
   const totals = await client.query<{ placed_orders: number; gross: number; discount: number; net: number }>(

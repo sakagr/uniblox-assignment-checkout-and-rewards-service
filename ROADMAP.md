@@ -22,7 +22,7 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 7 | Place orders (confirm checkout) | 75 min | ✅ Done |
 | 8 | Admin coupons and order list | 30 min | ✅ Done |
 | 9 | Admin report | 20 min | ✅ Done |
-| 10 | Harden with concurrency tests | 50 min | ⬜ |
+| 10 | Harden with concurrency tests | 50 min | ✅ Done |
 | 11 | Write the README and API docs | 30 min | ⬜ |
 | 12 | Finish DECISIONS.md | 30 min | ⬜ |
 | 13 | Final check and submit | 15 min | ⬜ |
@@ -166,7 +166,7 @@ Return the sales and coupon summary, consistent with the orders and coupons the 
   - T14: report reconciles with `/admin/orders` and `/admin/coupons` after a mixed run; two calls give the same body and change no rows
 - [x] Committed
 
-## 10. Harden with concurrency tests
+## 10. Harden with concurrency tests ✅
 
 Prove the invariants hold under heavy overlap, and prove the tests would catch a broken implementation.
 
@@ -176,7 +176,7 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
   - polls `pg_stat_activity` until `n` backends have `wait_event_type = 'Lock'`, with a timeout
   - lets race tests set up an exact interleaving instead of sleeping
   - if task 7 needs it first, build it there and tick this item then
-- [ ] Tests pass:
+- [x] Tests pass:
   - [x] T13: 20 parallel confirms with n = 5 give placement numbers 1..20 with no gaps, and exactly 4 coupons on orders 5/10/15/20
   - [x] **Cart lock (I4), deterministic:**
     - a separate connection opens a transaction, locks the cart `FOR UPDATE`, and sets it to `CHECKED_OUT` (simulating an in-flight confirm)
@@ -184,19 +184,29 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
     - the blocker commits; the `PUT` returns 409 `CART_ALREADY_CHECKED_OUT` and the line is unchanged
     - why this test exists: the task 5 parallel-PUT test passes even without the cart lock (the version increment is atomic and different products don't conflict), so it doesn't prove I4
   - [x] `PUT` with `quantity: 0` on an unknown product returns 404 `PRODUCT_NOT_FOUND` (pins the documented PUT-0 vs DELETE asymmetry; DELETE returns a 200 no-op)
-- [ ] Fix the `bumpVersion` doc comment in `src/modules/carts/service.ts`: it bumps unconditionally, and the caller checks `rowCount`
+- [x] Fix the `bumpVersion` doc comment in `src/modules/carts/service.ts`: it bumps unconditionally, and the caller checks `rowCount`
 - [x] Note in the `insertCouponFixture` doc comment that its milestones are not aligned with placement k × n, so it must not be used in admin-generation tests (task 8)
-- [ ] Fix the `export const CartLine =Type.Object(` spacing in `src/modules/carts/schemas.ts`
-- [ ] Sanity checks, done locally and not committed. For each, break the guard, confirm the named test fails, then restore it:
+- [x] Fix the `export const CartLine =Type.Object(` spacing in `src/modules/carts/schemas.ts`
+- [x] Sanity checks, done locally and not committed. For each, break the guard, confirm the named test fails, then restore it:
   - [x] remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail. **The I4 test failed** (the PUT returned 200 instead of 409; the other 16 tests in `cart.test.ts` still passed, which is the point of the test). The T4 run in task 7 covers confirm's cart lock, not item edits
   - [x] remove `AND redeemed_order_id IS NULL` from the coupon redeem: **T6 failed**, as intended (done in task 7)
   - [x] remove **both** stock defences in confirm (the under-lock stock check and `AND stock >= $qty`): **T5 failed**, as intended (done in task 7)
   - [x] swap the PRICE_CHANGED and INSUFFICIENT_STOCK checks: the precedence test ("reports PRICE_CHANGED before INSUFFICIENT_STOCK when both apply") failed, as intended (done in task 7)
   - [x] remove the cart `FOR UPDATE` in confirm: **T4 failed** (no replays), as intended (done in task 7)
-  - [ ] remove only `AND stock >= $qty` and confirm every test still passes: the under-lock check catches the shortfall first. Record it as intended defence in depth, not a test gap
-  - [ ] note which test caught each one, for DECISIONS §10 (so far: T6, T5, the precedence test, T4)
-- [ ] Record in DECISIONS §9, as an AI suggestion that was corrected: the parallel-PUT test proposed for task 5 did not test the cart lock it was meant to prove
-- [ ] Committed
+  - [x] remove only `AND p.stock >= v.qty` from confirm's guarded decrement: **all 137 tests still pass**, as intended. The under-lock stock check (step 6) throws first, and `CHECK (stock >= 0)` sits behind both. This is defence in depth, not a test gap. Only removing **both** application guards (T5 above) is caught
+  - [x] remove `FOR UPDATE` from the `store_stats` read in `generateMilestoneCoupon` (done in the tasks 8/9 session): **T12 failed**. Over 3 runs of `coupons.test.ts`, each run had 2 × 201; run 1 also had 1 × 409 + 7 × 500, runs 2 and 3 had 8 × 500. Every 500 was SQLSTATE 23505 on `coupons_milestone_key` (none on `coupons_milestone_order_id_key`), and T12 failed on its status-code assertions each time
+  - [x] note which test caught each one, for DECISIONS §10:
+
+    | Guard removed | Task | Caught by |
+    |---|---|---|
+    | `AND redeemed_order_id IS NULL` on the coupon redeem | 7 | T6 |
+    | both stock defences in confirm (under-lock check and `AND stock >= $qty`) | 7 | T5 |
+    | PRICE_CHANGED / INSUFFICIENT_STOCK check order swapped | 7 | "reports PRICE_CHANGED before INSUFFICIENT_STOCK when both apply" |
+    | cart `FOR UPDATE` in confirm | 7 | T4 (no replays) |
+    | `FOR UPDATE` on the `store_stats` read in admin generation | 8 | T12 (status codes; 500s were 23505 on `coupons_milestone_key`) |
+    | `FOR UPDATE` in `lockOpenCart` | 10 | I4 cart-lock test (`200` instead of `409`; the parallel-PUT test still passed) |
+    | `AND p.stock >= v.qty` alone | 10 | **nothing, by design** (defence in depth) |
+- [x] Committed
 
 ## 11. Write the README and API docs
 
@@ -224,7 +234,9 @@ Bring the decision record in line with what was actually built. This document is
   - auto-generated constraint names the probe disproved
   - the fixture coupon code containing `U`
   - the `pg_isready` socket-vs-TCP healthcheck race
-- [ ] §10 updated with what the sanity check (task 10) revealed
+  - **the parallel-PUT test proposed for task 5 did not test the cart lock it was meant to prove** (it passes without `FOR UPDATE`; the deterministic I4 test in task 10 replaced it as the proof)
+  - **a sanity check that gave a false result:** the first attempt at the task 8 counter-lock check used `-t "T12"`, which skipped the order-placing setup tests and gave a false result. Running the whole file gave the real result (T12 fails on status codes, with 23505 on `coupons_milestone_key`)
+- [ ] §10 updated with the sanity-check results (task 10 table: which test caught each guard, and the one that deliberately catches nothing)
 - [ ] Approved spec edits applied (`ROUTE_NOT_FOUND` was already added to §5.4 in task 7); spec and code agree
 - [ ] Correct the D6 and §4 wording on the counter lock (propose the edits, per AGENTS.md):
   - MVCC visibility is what stops admin pre-empting an in-flight milestone confirm: admin sees only committed placements
