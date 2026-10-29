@@ -217,7 +217,7 @@ With the default `COUPON_EVERY_N_ORDERS=5`, the fifth placed order's response ca
   - a deterministic test that an item edit waits for an in-flight checkout of its cart, then gets a 409 and leaves the line alone (I4)
 - **Correctness paths:** stale quotes (T8, T9), a coupon surviving a failed checkout (T7), the order snapshot surviving a price change (T10), the milestone coupon (T11), report reconciliation (T14), validation and error codes, the pg type parsers and transaction helper.
 - **Invariants:** every concurrency test ends with `expectInvariants()` in [test/helpers.ts](test/helpers.ts) (T15). It checks that stock plus units sold equals the seed stock, that coupons and orders agree, that each order's totals add up, and that the placement counter equals the order count.
-- Constraint violations are asserted by SQLSTATE and constraint name, so a test cannot pass for the wrong reason.
+- Race tests assert exact error codes and details, then check database state and the invariant checker. Each application guard was mutation-checked: removed, the suite run, and a named test confirmed to fail ([DECISIONS §10](DECISIONS.md)).
 
 Run them with `npm test` (local, needs `npm run db:up`) or `docker compose run --rm --build app npm test` (needs nothing else).
 
@@ -227,4 +227,4 @@ Run them with `npm test` (local, needs `npm run db:up`) or `docker compose run -
 
 **Deferred on purpose:** authentication, customer-bound coupons and expiry, quote expiry, a generic `Idempotency-Key`, real payments and reservations, admin product management, pagination and observability. See [DECISIONS §7](DECISIONS.md) for each reason.
 
-**Time spent:** _TODO (to be filled in)_
+**Time spent:** about 2.5 hours of design and about 4.5 hours of implementation, tests and docs, about 6.5 hours in total. That is over the 4–6 hour timebox; [DECISIONS](DECISIONS.md) says where the time went.

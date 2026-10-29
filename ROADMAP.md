@@ -23,8 +23,8 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 8 | Admin coupons and order list | 30 min | ✅ Done |
 | 9 | Admin report | 20 min | ✅ Done |
 | 10 | Harden with concurrency tests | 50 min | ✅ Done |
-| 11 | Write the README and API docs | 30 min | ⬜ |
-| 12 | Finish DECISIONS.md | 30 min | ⬜ |
+| 11 | Write the README and API docs | 30 min | ✅ Done |
+| 12 | Finish DECISIONS.md | 30 min | ✅ Done |
 | 13 | Final check and submit | 15 min | ⬜ |
 
 ---
@@ -208,7 +208,7 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
     | `AND p.stock >= v.qty` alone | 10 | **nothing, by design** (defence in depth) |
 - [x] Committed
 
-## 11. Write the README and API docs
+## 11. Write the README and API docs ✅
 
 Make the service easy to run and evaluate from a fresh clone.
 
@@ -224,30 +224,30 @@ Make the service easy to run and evaluate from a fresh clone.
 - [x] OpenAPI at `/docs` lists every endpoint with request and response schemas and error codes
 - [x] Committed
 
-## 12. Finish DECISIONS.md
+## 12. Finish DECISIONS.md ✅
 
 Bring the decision record in line with what was actually built. This document is heavily weighted in the evaluation.
 
 **Done when**
-- [ ] Every TODO resolved; "Implemented (planned)" changed to what actually shipped
-- [ ] §9 has at least one real implementation-time example of AI output that was corrected, beyond the design-phase ones; candidates so far:
+- [x] Every TODO resolved; "Implemented (planned)" changed to what actually shipped
+- [x] §9 has at least one real implementation-time example of AI output that was corrected, beyond the design-phase ones; candidates so far:
   - auto-generated constraint names the probe disproved
   - the fixture coupon code containing `U`
   - the `pg_isready` socket-vs-TCP healthcheck race
   - **the parallel-PUT test proposed for task 5 did not test the cart lock it was meant to prove** (it passes without `FOR UPDATE`; the deterministic I4 test in task 10 replaced it as the proof)
   - **a sanity check that gave a false result:** the first attempt at the task 8 counter-lock check used `-t "T12"`, which skipped the order-placing setup tests and gave a false result. Running the whole file gave the real result (T12 fails on status codes, with 23505 on `coupons_milestone_key`)
-- [ ] §10 updated with the sanity-check results (task 10 table: which test caught each guard, and the one that deliberately catches nothing)
-- [ ] Approved spec edits applied (`ROUTE_NOT_FOUND` was already added to §5.4 in task 7); spec and code agree
-- [ ] Correct the D6 and §4 wording on the counter lock (propose the edits, per AGENTS.md):
+- [x] §10 updated with the sanity-check results (task 10 table: which test caught each guard, and the one that deliberately catches nothing)
+- [x] Approved spec edits applied (`ROUTE_NOT_FOUND` was already added to §5.4 in task 7); spec and code agree
+- [x] Correct the D6 and §4 wording on the counter lock (propose the edits, per AGENTS.md):
   - MVCC visibility is what stops admin pre-empting an in-flight milestone confirm: admin sees only committed placements
   - the counter lock serializes admin calls into clean 409s, and makes admin wait for in-flight confirms
-- [ ] A DECISIONS entry for the container runtime (task 11 commit `build: run the app in a container`):
+- [x] A DECISIONS entry for the container runtime (D12) (task 11 commit `build: run the app in a container`):
   - tsx in the image rather than compiled `dist/`: `tsc` emits `migrate.js` under `dist/src/db`, where the `../../migrations/` lookup resolves to the wrong place
   - devDependencies kept in the image, so tsx can run the app and vitest can run the suite in the container (`npm run test:docker`)
   - migrations run on every container start; safe because they hold a Postgres advisory lock and are idempotent (`schema_migrations`)
   - `exec` into tsx with `init: true`, not `npm start`, so SIGTERM reaches the server and graceful shutdown runs (stop measured at ~0.3s, exit 0)
   - the lockfile is portable: the suite passed as `linux/amd64` (vite 8 bundles with Rolldown, not Rollup; its `@rolldown/binding-linux-*-musl` and the `esbuild` Linux packages are in the lockfile)
-- [ ] Approximate time spent filled in
+- [x] Approximate time spent filled in (DECISIONS header and README)
 - [ ] Committed
 
 ## 13. Final check and submit
