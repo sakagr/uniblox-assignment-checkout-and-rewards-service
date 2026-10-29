@@ -213,16 +213,16 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
 Make the service easy to run and evaluate from a fresh clone.
 
 **Done when**
-- [ ] README covers:
+- [x] README covers:
   - prerequisites
   - setup (`db:up`, migrate, `dev`)
   - running tests
   - configuration table
   - admin-only endpoints marked
   - links to `/docs`, SPECIFICATIONS and DECISIONS
-- [ ] A copy-paste walkthrough (curl or `.http` file): cart → items → quote → confirm → replay → order → report
+- [x] A copy-paste walkthrough (curl or `.http` file): cart → items → quote → confirm → replay → order → report
 - [x] OpenAPI at `/docs` lists every endpoint with request and response schemas and error codes
-- [ ] Committed
+- [x] Committed
 
 ## 12. Finish DECISIONS.md
 
