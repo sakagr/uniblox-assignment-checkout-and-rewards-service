@@ -1,6 +1,7 @@
 import { Type, type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import type pg from 'pg';
 import { paise } from '../../domain/money.js';
+import { errorResponses } from '../../http/error-responses.js';
 
 const Product = Type.Object({
   id: Type.String(),
@@ -17,7 +18,7 @@ export const productRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool }> = async
       schema: {
         tags: ['products'],
         summary: 'List products',
-        response: { 200: Type.Array(Product) },
+        response: { 200: Type.Array(Product), ...errorResponses({}) },
       },
     },
     async () => {

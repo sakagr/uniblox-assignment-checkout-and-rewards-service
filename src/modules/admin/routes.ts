@@ -2,6 +2,7 @@ import { Type, type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typ
 import type pg from 'pg';
 import type { Config } from '../../config.js';
 import { withTransaction } from '../../db/tx.js';
+import { errorResponses } from '../../http/error-responses.js';
 import { AdminOrder, Coupon, CouponListQuery, GenerateCouponResponse, Report } from './schemas.js';
 import { buildReport, generateMilestoneCoupon, listCoupons, listOrders } from './service.js';
 
@@ -16,7 +17,10 @@ export const adminRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Con
       schema: {
         tags: ['admin'],
         summary: '(admin) Generate the coupon for the lowest reached milestone that has none',
-        response: { 201: GenerateCouponResponse },
+        response: {
+          201: GenerateCouponResponse,
+          ...errorResponses({ 409: ['NO_ELIGIBLE_MILESTONE'], 503: ['TRANSIENT_CONFLICT'] }),
+        },
       },
     },
     async (_request, reply) => {
@@ -32,7 +36,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Con
         tags: ['admin'],
         summary: '(admin) List coupons by milestone, optionally filtered by status',
         querystring: CouponListQuery,
-        response: { 200: Type.Array(Coupon) },
+        response: { 200: Type.Array(Coupon), ...errorResponses({ 400: ['VALIDATION_ERROR'] }) },
       },
     },
     (request) => listCoupons(pool, request.query.status),
@@ -44,7 +48,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Con
       schema: {
         tags: ['admin'],
         summary: '(admin) List placed orders by placement number',
-        response: { 200: Type.Array(AdminOrder) },
+        response: { 200: Type.Array(AdminOrder), ...errorResponses({}) },
       },
     },
     () => listOrders(pool),
@@ -56,7 +60,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Con
       schema: {
         tags: ['admin'],
         summary: '(admin) Sales and coupon summary',
-        response: { 200: Report },
+        response: { 200: Report, ...errorResponses({}) },
       },
     },
     () => withTransaction(pool, buildReport, { isolation: 'REPEATABLE READ', readOnly: true }),

@@ -6,6 +6,7 @@ import Fastify, { type FastifyServerOptions } from 'fastify';
 import type pg from 'pg';
 import type { Config } from './config.js';
 import { registerErrorHandling } from './http/error-handler.js';
+import { errorResponses } from './http/error-responses.js';
 import { adminRoutes } from './modules/admin/routes.js';
 import { cartRoutes } from './modules/carts/routes.js';
 import { checkoutRoutes } from './modules/checkout/routes.js';
@@ -51,7 +52,7 @@ export async function buildApp({ config, pool, logger = false }: AppDeps) {
       schema: {
         tags: ['system'],
         summary: 'Liveness and database check',
-        response: { 200: Type.Object({ status: Type.Literal('ok') }) },
+        response: { 200: Type.Object({ status: Type.Literal('ok') }), ...errorResponses({}) },
       },
     },
     async () => {

@@ -221,7 +221,7 @@ Make the service easy to run and evaluate from a fresh clone.
   - admin-only endpoints marked
   - links to `/docs`, SPECIFICATIONS and DECISIONS
 - [ ] A copy-paste walkthrough (curl or `.http` file): cart → items → quote → confirm → replay → order → report
-- [ ] OpenAPI at `/docs` lists every endpoint with request and response schemas and error codes
+- [x] OpenAPI at `/docs` lists every endpoint with request and response schemas and error codes
 - [ ] Committed
 
 ## 12. Finish DECISIONS.md
