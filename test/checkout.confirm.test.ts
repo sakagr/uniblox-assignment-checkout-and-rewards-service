@@ -1,4 +1,5 @@
 // Stock ownership (orders are insert-only, so consumed stock cannot be restored):
+//   sku-hoodie           PRICE_CHANGED-before-INSUFFICIENT_STOCK test (drained to 0)
 //   sku-sticker-pack     shared filler for placeSticker / earnCoupon (never drained)
 //   sku-mug, sku-tshirt, sku-notebook   small non-draining quantities
 // No direct stock SQL in this file; prices changed by a test are restored in `finally`.
@@ -264,6 +265,135 @@ describe('milestone coupon', () => {
       expect(fetched.json().earnedCoupon).toBeNull();
     } finally {
       await off.close();
+    }
+  });
+});
+
+const putQty = (cartId: string, productId: string, quantity: number) =>
+  ctx.app.inject({ method: 'PUT', url: `/carts/${cartId}/items/${productId}`, payload: { quantity } });
+
+const setPrice = (productId: string, pricePaise: number) =>
+  ctx.pool.query('UPDATE products SET unit_price_paise = $2 WHERE id = $1', [productId, pricePaise]);
+
+const cartStatus = async (cartId: string) =>
+  (await ctx.app.inject({ method: 'GET', url: `/carts/${cartId}` })).json().status as string;
+
+describe('stale quotes', () => {
+  it('T8: a price change in either direction is PRICE_CHANGED, and the rollback releases the coupon', async () => {
+    // The quote carries a real coupon. Confirm redeems it at step 5, BEFORE the price check
+    // at step 6, so "coupon still available" only holds if the PRICE_CHANGED rollback undid it.
+    const { code } = await earnCoupon();
+    const cartId = await cartWith(ctx.app, ['sku-mug', 2]);
+    const counts = async () => ({
+      stock: (await scalar("SELECT stock FROM products WHERE id = 'sku-mug'")).stock,
+      placed: (await scalar('SELECT placed_orders FROM store_stats')).placed_orders,
+      orders: (await scalar('SELECT count(*)::int AS n FROM orders')).n,
+    });
+    const couponRow = async () =>
+      scalar('SELECT redeemed_order_id, redeemed_at FROM coupons WHERE code = $1', [code]);
+
+    const expectRejected = async (quoteId: string, currentPaise: number, before: Awaited<ReturnType<typeof counts>>) => {
+      const res = await confirm(ctx.app, cartId, quoteId);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toMatchObject({
+        code: 'QUOTE_STALE',
+        details: {
+          reason: 'PRICE_CHANGED',
+          changes: [{ productId: 'sku-mug', quotedPaise: 29900, currentPaise }],
+        },
+      });
+      expect(await couponRow()).toEqual({ redeemed_order_id: null, redeemed_at: null });
+      expect(await counts()).toEqual(before);
+      expect(await cartStatus(cartId)).toBe('OPEN');
+    };
+
+    try {
+      const before = await counts();
+
+      // Up.
+      const q1 = (await requestQuote(ctx.app, cartId, code)).json().quoteId;
+      await setPrice('sku-mug', 39900);
+      await expectRejected(q1, 39900, before);
+
+      // Down: any difference is stale, not just an increase (D7).
+      await setPrice('sku-mug', 29900);
+      const q2 = (await requestQuote(ctx.app, cartId, code)).json().quoteId;
+      await setPrice('sku-mug', 19900);
+      await expectRejected(q2, 19900, before);
+
+      // Re-quote at the new price and the same coupon: it was never lost, and now redeems.
+      const q3 = await requestQuote(ctx.app, cartId, code);
+      expect(q3.json()).toMatchObject({ subtotalPaise: 39800, discountPaise: 3980, totalPaise: 35820 });
+      const placed = await confirm(ctx.app, cartId, q3.json().quoteId);
+      expect(placed.statusCode).toBe(201);
+      expect(placed.json().order).toMatchObject({
+        couponApplied: { code, percent: 10 },
+        subtotalPaise: 39800,
+        discountPaise: 3980,
+        totalPaise: 35820,
+      });
+      expect((await couponRow()).redeemed_order_id).toBe(placed.json().order.id);
+    } finally {
+      await setPrice('sku-mug', 29900);
+    }
+  });
+
+  it('T9: a cart edit after the quote is CART_CHANGED; re-sending the same quantity is not an edit', async () => {
+    const cartId = await cartWith(ctx.app, ['sku-mug', 1]);
+    const stale = await quoteFor(cartId);
+    const before = {
+      stock: (await scalar("SELECT stock FROM products WHERE id = 'sku-mug'")).stock,
+      placed: (await scalar('SELECT placed_orders FROM store_stats')).placed_orders,
+    };
+    expect((await putQty(cartId, 'sku-mug', 2)).statusCode).toBe(200);
+
+    const res = await confirm(ctx.app, cartId, stale);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatchObject({ code: 'QUOTE_STALE', details: { reason: 'CART_CHANGED' } });
+    expect(await cartStatus(cartId)).toBe('OPEN');
+    expect((await scalar("SELECT stock FROM products WHERE id = 'sku-mug'")).stock).toBe(before.stock);
+    expect((await scalar('SELECT placed_orders FROM store_stats')).placed_orders).toBe(before.placed);
+
+    // A fresh quote for the edited cart places the edited order.
+    const fresh = await confirm(ctx.app, cartId, await quoteFor(cartId));
+    expect(fresh.statusCode).toBe(201);
+    expect(fresh.json().order.lines).toMatchObject([{ productId: 'sku-mug', quantity: 2 }]);
+
+    // A no-op PUT (same quantity) leaves the version alone, so the quote stays valid.
+    const noop = await cartWith(ctx.app, ['sku-notebook', 1]);
+    const quoteId = await quoteFor(noop);
+    expect((await putQty(noop, 'sku-notebook', 1)).statusCode).toBe(200);
+    expect((await confirm(ctx.app, noop, quoteId)).statusCode).toBe(201);
+  });
+
+  it('reports PRICE_CHANGED before INSUFFICIENT_STOCK when both apply', async () => {
+    const cartId = await cartWith(ctx.app, ['sku-hoodie', 1]);
+    const quoteId = await quoteFor(cartId);
+
+    // Drain the hoodie through a real order (orders are insert-only, so this stays drained).
+    const drain = await cartWith(ctx.app, ['sku-hoodie', 25]);
+    expect((await confirm(ctx.app, drain, await quoteFor(drain))).statusCode).toBe(201);
+    expect((await scalar("SELECT stock FROM products WHERE id = 'sku-hoodie'")).stock).toBe(0);
+
+    try {
+      // Only the stock problem so far: this proves it is a competing failure below.
+      const short = await confirm(ctx.app, cartId, quoteId);
+      expect(short.statusCode).toBe(409);
+      expect(short.json().error).toMatchObject({
+        code: 'INSUFFICIENT_STOCK',
+        details: [{ productId: 'sku-hoodie', requested: 1, available: 0 }],
+      });
+
+      await setPrice('sku-hoodie', 159900);
+      const both = await confirm(ctx.app, cartId, quoteId);
+      expect(both.statusCode).toBe(409);
+      expect(both.json().error).toMatchObject({
+        code: 'QUOTE_STALE',
+        details: { reason: 'PRICE_CHANGED', changes: [{ productId: 'sku-hoodie', quotedPaise: 149900, currentPaise: 159900 }] },
+      });
+      expect(await cartStatus(cartId)).toBe('OPEN');
+    } finally {
+      await setPrice('sku-hoodie', 149900);
     }
   });
 });
