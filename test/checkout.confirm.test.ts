@@ -1,4 +1,5 @@
 // Stock ownership (orders are insert-only, so consumed stock cannot be restored):
+//   sku-limited-sneaker  T7 (drained to 0)
 //   sku-hoodie           PRICE_CHANGED-before-INSUFFICIENT_STOCK test (drained to 0)
 //   sku-sticker-pack     shared filler for placeSticker / earnCoupon (never drained)
 //   sku-mug, sku-tshirt, sku-notebook   small non-draining quantities
@@ -277,6 +278,48 @@ const setPrice = (productId: string, pricePaise: number) =>
 
 const cartStatus = async (cartId: string) =>
   (await ctx.app.inject({ method: 'GET', url: `/carts/${cartId}` })).json().status as string;
+
+describe('failed checkouts', () => {
+  it('T7: a coupon survives a checkout that fails on stock, and redeems on another cart', async () => {
+    // Confirm redeems the coupon at step 5 and only then finds the stock short at step 6,
+    // so the coupon being available afterwards proves the rollback released it.
+    const { code } = await earnCoupon();
+    const cartId = await cartWith(ctx.app, ['sku-limited-sneaker', 2]);
+    const quote = await requestQuote(ctx.app, cartId, code);
+    expect(quote.statusCode).toBe(201);
+
+    // Someone else takes both sneakers after the quote.
+    const rival = await cartWith(ctx.app, ['sku-limited-sneaker', 2]);
+    expect((await confirm(ctx.app, rival, await quoteFor(rival))).statusCode).toBe(201);
+    const before = {
+      placed: (await scalar('SELECT placed_orders FROM store_stats')).placed_orders,
+      orders: (await scalar('SELECT count(*)::int AS n FROM orders')).n,
+    };
+
+    const res = await confirm(ctx.app, cartId, quote.json().quoteId);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatchObject({
+      code: 'INSUFFICIENT_STOCK',
+      details: [{ productId: 'sku-limited-sneaker', requested: 2, available: 0 }],
+    });
+    expect(await cartStatus(cartId)).toBe('OPEN');
+    expect(await scalar('SELECT redeemed_order_id, redeemed_at FROM coupons WHERE code = $1', [code])).toEqual({
+      redeemed_order_id: null,
+      redeemed_at: null,
+    });
+    expect((await scalar('SELECT placed_orders FROM store_stats')).placed_orders).toBe(before.placed);
+    expect((await scalar('SELECT count(*)::int AS n FROM orders')).n).toBe(before.orders);
+
+    // The same coupon is still good on another cart.
+    const other = await cartWith(ctx.app, ['sku-mug', 1]);
+    const redeemed = await confirm(ctx.app, other, (await requestQuote(ctx.app, other, code)).json().quoteId);
+    expect(redeemed.statusCode).toBe(201);
+    expect(redeemed.json().order.couponApplied).toEqual({ code, percent: 10 });
+    expect((await scalar('SELECT redeemed_order_id FROM coupons WHERE code = $1', [code])).redeemed_order_id).toBe(
+      redeemed.json().order.id,
+    );
+  });
+});
 
 describe('stale quotes', () => {
   it('T8: a price change in either direction is PRICE_CHANGED, and the rollback releases the coupon', async () => {

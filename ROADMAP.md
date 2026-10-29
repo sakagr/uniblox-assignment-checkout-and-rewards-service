@@ -19,7 +19,7 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 4 | Build the app foundation | 45 min | ✅ Done |
 | 5 | Products and carts | 40 min | ✅ Done |
 | 6 | Checkout quote | 30 min | ✅ Done |
-| 7 | Place orders (confirm checkout) | 75 min | ⬜ |
+| 7 | Place orders (confirm checkout) | 75 min | ✅ Done |
 | 8 | Admin coupons and order list | 30 min | ⬜ |
 | 9 | Admin report | 20 min | ⬜ |
 | 10 | Harden with concurrency tests | 50 min | ⬜ |
@@ -115,15 +115,15 @@ Price a cart (with an optional coupon) and store the quote without changing stoc
 - [x] Test: a quote mutates nothing (stock, coupon, cart status and version unchanged)
 - [x] Committed
 
-## 7. Place orders (confirm checkout)
+## 7. Place orders (confirm checkout) ✅
 
 Turn a quote into an order exactly as quoted. This is the core of the assignment: idempotent retries, no overselling, single coupon redemption, gapless placement numbers, and the milestone coupon.
 
 **Done when**
-- [ ] `POST /carts/:cartId/checkout` follows §6.3 step by step, in the D9 lock order
+- [x] `POST /carts/:cartId/checkout` follows §6.3 step by step, in the D9 lock order
 - [x] Replay: same quote on a checked-out cart gives 200 with `Idempotent-Replayed: true` and an identical body; a different quote gives 409
-- [ ] Stale quote: version mismatch gives `QUOTE_STALE` / `CART_CHANGED`; price mismatch (checked after the product locks) gives `PRICE_CHANGED` with a per-line diff
-- [ ] Coupon redeemed by conditional update; stock decremented by conditional update; counter incremented last
+- [x] Stale quote: version mismatch gives `QUOTE_STALE` / `CART_CHANGED`; price mismatch (checked after the product locks) gives `PRICE_CHANGED` with a per-line diff
+- [x] Coupon redeemed by conditional update; stock decremented by conditional update; counter incremented last
 - [x] Order and line snapshots inserted; cart set to `CHECKED_OUT`; milestone coupon auto-generated with `ON CONFLICT (milestone) DO NOTHING` when enabled
 - [x] `GET /orders/:orderId` returns the §5.2 Order shape, including `couponApplied` and `earnedCoupon`
 - [x] After confirm, `GET /carts/{id}` returns `CHECKED_OUT` and `orderId` equal to the created order
@@ -132,7 +132,7 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
   - order and quote totals computed from that line, plus the matching `quote_lines` row
   - that product's stock decremented by 1 in the same transaction
   - why: today the fixture order has `subtotal_paise = 100` and no lines, which breaks "subtotal = Σ line totals" and "stock + sold = seed stock"
-- [ ] Tests pass:
+- [x] Tests pass:
   - T4: 10 parallel confirms of one quote give one order
   - T5: oversell race on the stock-2 product
   - T6: coupon race
@@ -140,7 +140,7 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
   - T8 and T9: stale quotes
   - T10: order history survives a price change
   - T11: auto coupon on the nth order
-- [ ] Committed in increments (happy path first, then each failure mode with its test)
+- [x] Committed in increments (happy path first, then each failure mode with its test)
 
 ## 8. Admin coupons and order list
 
