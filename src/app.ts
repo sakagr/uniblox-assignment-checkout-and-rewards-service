@@ -6,6 +6,7 @@ import Fastify, { type FastifyServerOptions } from 'fastify';
 import type pg from 'pg';
 import type { Config } from './config.js';
 import { registerErrorHandling } from './http/error-handler.js';
+import { adminRoutes } from './modules/admin/routes.js';
 import { cartRoutes } from './modules/carts/routes.js';
 import { checkoutRoutes } from './modules/checkout/routes.js';
 import { orderRoutes } from './modules/orders/routes.js';
@@ -63,6 +64,7 @@ export async function buildApp({ config, pool, logger = false }: AppDeps) {
   await app.register(cartRoutes, { pool });
   await app.register(checkoutRoutes, { pool, config });
   await app.register(orderRoutes, { pool });
+  await app.register(adminRoutes, { pool, config });
 
   return app;
 }

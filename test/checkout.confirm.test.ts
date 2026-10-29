@@ -233,6 +233,18 @@ describe('milestone coupon', () => {
     const replay = await confirm(ctx.app, fetched.json().cartId, fetched.json().quoteId);
     expect(replay.statusCode).toBe(200);
     expect(replay.json().earnedCoupon).toEqual(earnedCoupon);
+
+    // Auto-generation already rewarded this milestone, so the admin backfill has nothing to do.
+    const admin = await ctx.app.inject({ method: 'POST', url: '/admin/coupons' });
+    expect(admin.statusCode).toBe(409);
+    expect(admin.json().error).toMatchObject({
+      code: 'NO_ELIGIBLE_MILESTONE',
+      details: {
+        placedOrders: order.placementNumber,
+        rewardedMilestones: order.placementNumber / 3,
+        nextMilestoneAtOrder: order.placementNumber + 3,
+      },
+    });
   });
 
   it('earns nothing on placements that are not a multiple of n', async () => {

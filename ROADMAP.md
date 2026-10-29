@@ -147,12 +147,12 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
 Give the administrator manual coupon generation (a backfill for missed milestones) and listing endpoints for reconciliation.
 
 **Done when**
-- [ ] `POST /admin/coupons` follows §6.4: locks the counter, picks the lowest unrewarded milestone, links it to the milestone order, returns `pendingMilestones`; 409 `NO_ELIGIBLE_MILESTONE` with details otherwise
+- [x] `POST /admin/coupons` follows §6.4: locks the counter, picks the lowest unrewarded milestone, links it to the milestone order, returns `pendingMilestones`; 409 `NO_ELIGIBLE_MILESTONE` with details otherwise
 - [ ] `GET /admin/coupons?status=` and `GET /admin/orders`
 - [ ] Tests pass:
-  - T12: 10 parallel generate calls with auto-generation off give exactly one coupon per milestone
-  - T11 remainder: after an auto-generated coupon, `POST /admin/coupons` returns 409 `NO_ELIGIBLE_MILESTONE` (the part of T11 that needs this endpoint)
-  - With auto-generation off, an admin backfill of a milestone makes `GET /orders/:id` for the milestone order show `earnedCoupon` (it was `null` before; task 7 pins the `null` side)
+  - [x] T12: 10 parallel generate calls with auto-generation off give exactly one coupon per milestone
+  - [x] T11 remainder: after an auto-generated coupon, `POST /admin/coupons` returns 409 `NO_ELIGIBLE_MILESTONE` (the part of T11 that needs this endpoint)
+  - [x] With auto-generation off, an admin backfill of a milestone makes `GET /orders/:id` for the milestone order show `earnedCoupon` (it was `null` before; task 7 pins the `null` side)
 - [ ] Committed
 
 ## 9. Admin report
@@ -226,6 +226,9 @@ Bring the decision record in line with what was actually built. This document is
   - the `pg_isready` socket-vs-TCP healthcheck race
 - [ ] §10 updated with what the sanity check (task 10) revealed
 - [ ] Approved spec edits applied (`ROUTE_NOT_FOUND` was already added to §5.4 in task 7); spec and code agree
+- [ ] Correct the D6 and §4 wording on the counter lock (propose the edits, per AGENTS.md):
+  - MVCC visibility is what stops admin pre-empting an in-flight milestone confirm: admin sees only committed placements
+  - the counter lock serializes admin calls into clean 409s, and makes admin wait for in-flight confirms
 - [ ] Approximate time spent filled in
 - [ ] Committed
 
