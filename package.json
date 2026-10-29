@@ -10,7 +10,13 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:reset": "tsx src/db/migrate.ts --reset",
+    "db:migrate:test": "tsx src/db/migrate.ts --test",
+    "db:psql": "docker compose exec db psql -U app -d checkout"
   },
   "dependencies": {
     "@fastify/swagger": "^9.9.2",

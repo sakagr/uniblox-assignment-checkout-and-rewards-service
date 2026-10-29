@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: checkout
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs only against a FRESH volume. Re-running it (e.g. to re-create
+      # checkout_test) requires `docker compose down -v` first — `db:down`
+      # deliberately keeps the volume, so data survives a plain restart.
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -h forces a TCP connection. During first-time init, postgres runs
+      # /docker-entrypoint-initdb.d/* against a *temporary* server started
+      # with listen_addresses='' (Unix socket only). A socket-based
+      # `pg_isready` would report healthy during that window, and
+      # `up -d --wait` would return before checkout_test exists. Forcing TCP
+      # means the check can only pass once the real server is listening,
+      # which happens strictly after the init scripts finish.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U app -d checkout"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  pgdata:
