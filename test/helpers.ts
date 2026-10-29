@@ -91,3 +91,27 @@ export async function insertCouponFixture(
   );
   return code;
 }
+
+type TestApp = Awaited<ReturnType<typeof createTestApp>>['app'];
+
+/** A new cart holding the given `[productId, quantity]` lines, built through the API. */
+export async function cartWith(app: TestApp, ...lines: Array<[string, number]>): Promise<string> {
+  const cartId: string = (await app.inject({ method: 'POST', url: '/carts' })).json().id;
+  for (const [productId, quantity] of lines) {
+    const res = await app.inject({ method: 'PUT', url: `/carts/${cartId}/items/${productId}`, payload: { quantity } });
+    if (res.statusCode !== 200) throw new Error(`cartWith: PUT ${productId} x${quantity} gave ${res.statusCode}`);
+  }
+  return cartId;
+}
+
+export function requestQuote(app: TestApp, cartId: string, couponCode?: string) {
+  return app.inject({
+    method: 'POST',
+    url: `/carts/${cartId}/checkout/quote`,
+    payload: couponCode === undefined ? {} : { couponCode },
+  });
+}
+
+export function confirm(app: TestApp, cartId: string, quoteId: string) {
+  return app.inject({ method: 'POST', url: `/carts/${cartId}/checkout`, payload: { quoteId } });
+}

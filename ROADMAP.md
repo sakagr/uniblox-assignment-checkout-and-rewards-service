@@ -126,7 +126,7 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
 - [ ] Coupon redeemed by conditional update; stock decremented by conditional update; counter incremented last
 - [ ] Order and line snapshots inserted; cart set to `CHECKED_OUT`; milestone coupon auto-generated with `ON CONFLICT (milestone) DO NOTHING` when enabled
 - [ ] `GET /orders/:orderId` returns the §5.2 Order shape, including `couponApplied` and `earnedCoupon`
-- [ ] After confirm, `GET /carts/{id}` returns `CHECKED_OUT` and `orderId` equal to the created order
+- [x] After confirm, `GET /carts/{id}` returns `CHECKED_OUT` and `orderId` equal to the created order
 - [ ] Tests pass:
   - T4: 10 parallel confirms of one quote give one order
   - T5: oversell race on the stock-2 product
@@ -178,6 +178,14 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
     - why this test exists: the task 5 parallel-PUT test passes even without the cart lock (the version increment is atomic and different products don't conflict), so it doesn't prove I4
   - `PUT` with `quantity: 0` on an unknown product returns 404 `PRODUCT_NOT_FOUND` (pins the documented PUT-0 vs DELETE asymmetry; DELETE returns a 200 no-op)
 - [ ] Fix the `bumpVersion` doc comment in `src/modules/carts/service.ts`: it bumps unconditionally, and the caller checks `rowCount`
+- [ ] Make `insertOrderFixture` (in `test/helpers.ts`) a coherent order, so the T15 invariant checker and T14 report reconciliation hold with fixtures present:
+  - one `order_lines` row: `sku-sticker-pack`, quantity 1, at its current price
+  - order and quote totals computed from that line, plus the matching `quote_lines` row
+  - that product's stock decremented by 1 in the same transaction
+  - why: today the fixture order has `subtotal_paise = 100` and no lines, which breaks "subtotal = Σ line totals" and "stock + sold = seed stock"
+  - do this before writing the T15 checker; if task 7 or 9 tests trip on it first, fix it there and tick this item
+- [ ] Note in the `insertCouponFixture` doc comment that its milestones are not aligned with placement k × n, so it must not be used in admin-generation tests (task 8)
+- [ ] Fix the `export const CartLine =Type.Object(` spacing in `src/modules/carts/schemas.ts`
 - [ ] Sanity checks, done locally and not committed. For each, break the guard, confirm the named test fails, then restore it:
   - remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail
   - remove `AND redeemed_order_id IS NULL` from the coupon redeem: T6 must fail (two orders carry the coupon)
