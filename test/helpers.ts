@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
+import { expect } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig, type Config } from '../src/config.js';
 import { migrate } from '../src/db/migrate.js';
@@ -170,4 +171,73 @@ export function requestQuote(app: TestApp, cartId: string, couponCode?: string) 
 
 export function confirm(app: TestApp, cartId: string, quoteId: string) {
   return app.inject({ method: 'POST', url: `/carts/${cartId}/checkout`, payload: { quoteId } });
+}
+
+/**
+ * Stock each product starts with. The invariant checker's only source of seed
+ * stock; never derive it from the current `products` table. A test in
+ * db.test.ts checks it against migrations/002_seed.sql.
+ */
+export const SEED_STOCK: Readonly<Record<string, number>> = {
+  'sku-tshirt': 100,
+  'sku-mug': 50,
+  'sku-notebook': 200,
+  'sku-hoodie': 25,
+  'sku-sticker-pack': 500,
+  'sku-limited-sneaker': 2,
+};
+
+/**
+ * T15: the invariants every test that places orders must leave intact, over
+ * every order in the database (fixture orders included):
+ *  - I1/I2: per product, stock + Σ sold = SEED_STOCK, and stock is not negative
+ *  - I5:    orders carrying a coupon and redeemed coupons match one to one
+ *  - I8:    per order, subtotal = Σ line totals and total = subtotal - discount
+ *  - I9:    the counter equals the order count, and placements are exactly 1..N
+ *
+ * Rule for any file that calls this: never change stock with direct SQL unless
+ * it is restored in `finally`. Orders are insert-only, so consumed stock cannot
+ * be given back; give each test that drains a product its own product.
+ */
+export async function expectInvariants(pool: pg.Pool): Promise<void> {
+  const products = await pool.query<{ id: string; stock: number; sold: number }>(
+    `SELECT p.id, p.stock, COALESCE(sum(ol.quantity), 0)::int AS sold
+       FROM products p LEFT JOIN order_lines ol ON ol.product_id = p.id
+      GROUP BY p.id ORDER BY p.id`,
+  );
+  expect(products.rows.map((r) => r.id)).toEqual(Object.keys(SEED_STOCK).sort());
+  for (const row of products.rows) {
+    expect(row.stock, `${row.id} stock is negative`).toBeGreaterThanOrEqual(0);
+    expect(row.stock + row.sold, `${row.id}: stock + sold != seed stock`).toBe(SEED_STOCK[row.id]);
+  }
+
+  const unmatchedOrders = await pool.query(
+    `SELECT o.id FROM orders o
+      WHERE o.coupon_code IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM coupons c WHERE c.code = o.coupon_code AND c.redeemed_order_id = o.id)`,
+  );
+  expect(unmatchedOrders.rows, 'orders whose coupon is not redeemed by them').toEqual([]);
+  const unmatchedCoupons = await pool.query(
+    `SELECT c.code FROM coupons c
+      WHERE c.redeemed_order_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.id = c.redeemed_order_id AND o.coupon_code = c.code)`,
+  );
+  expect(unmatchedCoupons.rows, 'redeemed coupons whose order does not carry them').toEqual([]);
+
+  const badTotals = await pool.query(
+    `SELECT o.id FROM orders o
+      WHERE o.subtotal_paise <> COALESCE((SELECT sum(line_total_paise) FROM order_lines WHERE order_id = o.id), -1)
+         OR o.total_paise <> o.subtotal_paise - o.discount_paise`,
+  );
+  expect(badTotals.rows, 'orders whose totals are inconsistent').toEqual([]);
+
+  const counter = await pool.query<{ placed: number; orders: number; min: number | null; max: number | null }>(
+    `SELECT (SELECT placed_orders FROM store_stats) AS placed, count(*)::int AS orders,
+            min(placement_number) AS min, max(placement_number) AS max
+       FROM orders`,
+  );
+  const { placed, orders, min, max } = counter.rows[0]!;
+  expect(placed, 'counter != order count').toBe(orders);
+  // UNIQUE(placement_number) plus min 1 and max N makes the set exactly 1..N.
+  if (orders > 0) expect([min, max], 'placements are not 1..N').toEqual([1, orders]);
 }

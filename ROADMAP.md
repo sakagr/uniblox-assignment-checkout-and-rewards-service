@@ -121,7 +121,7 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
 
 **Done when**
 - [ ] `POST /carts/:cartId/checkout` follows §6.3 step by step, in the D9 lock order
-- [ ] Replay: same quote on a checked-out cart gives 200 with `Idempotent-Replayed: true` and an identical body; a different quote gives 409
+- [x] Replay: same quote on a checked-out cart gives 200 with `Idempotent-Replayed: true` and an identical body; a different quote gives 409
 - [ ] Stale quote: version mismatch gives `QUOTE_STALE` / `CART_CHANGED`; price mismatch (checked after the product locks) gives `PRICE_CHANGED` with a per-line diff
 - [ ] Coupon redeemed by conditional update; stock decremented by conditional update; counter incremented last
 - [ ] Order and line snapshots inserted; cart set to `CHECKED_OUT`; milestone coupon auto-generated with `ON CONFLICT (milestone) DO NOTHING` when enabled
@@ -169,7 +169,7 @@ Return the sales and coupon summary, consistent with the orders and coupons the 
 Prove the invariants hold under heavy overlap, and prove the tests would catch a broken implementation.
 
 **Done when**
-- [ ] Invariant checker (T15) in `test/helpers.ts`, run at the end of every concurrency test
+- [x] Invariant checker (T15) in `test/helpers.ts`, run at the end of every concurrency test
 - [ ] `waitForLockWaiters(pool, n)` in `test/helpers.ts`:
   - polls `pg_stat_activity` until `n` backends have `wait_event_type = 'Lock'`, with a timeout
   - lets race tests set up an exact interleaving instead of sleeping

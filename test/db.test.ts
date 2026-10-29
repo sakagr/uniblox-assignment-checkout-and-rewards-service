@@ -1,8 +1,9 @@
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createPool, parseSafeInteger } from '../src/db/pool.js';
 import { withTransaction } from '../src/db/tx.js';
-import { setupTestDb, testConfig } from './helpers.js';
+import { SEED_STOCK, setupTestDb, testConfig } from './helpers.js';
 
 const config = testConfig();
 const pool = createPool({ databaseUrl: config.databaseUrl, pgPoolMax: 5 });
@@ -135,5 +136,16 @@ describe('withTransaction', () => {
 
     expect(release).toHaveBeenCalledTimes(2);
     for (const call of release.mock.calls) expect(call[0]).toBeUndefined();
+  });
+});
+
+describe('SEED_STOCK', () => {
+  it('matches migrations/002_seed.sql, the source the invariant checker relies on', () => {
+    const sql = readFileSync(new URL('../migrations/002_seed.sql', import.meta.url), 'utf8');
+    const seeded = [...sql.matchAll(/\('(sku-[a-z0-9-]+)',\s*'[^']*',\s*\d+,\s*(\d+)\)/g)].map(
+      (m) => [m[1], Number(m[2])] as const,
+    );
+    expect(seeded.length).toBeGreaterThan(0);
+    expect(Object.fromEntries(seeded)).toEqual(SEED_STOCK);
   });
 });

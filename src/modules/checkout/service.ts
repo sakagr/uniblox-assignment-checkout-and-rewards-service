@@ -128,7 +128,16 @@ export async function confirmCheckout(client: pg.PoolClient, cartId: string, quo
   );
   if (cart.rows.length === 0) throw Errors.cartNotFound();
   const { status, version } = cart.rows[0]!;
-  if (status !== 'OPEN') throw Errors.cartAlreadyCheckedOut();
+
+  // 2. Already checked out: the same quote is a retry and replays the order; anything else is a conflict (D2).
+  if (status !== 'OPEN') {
+    const existing = await client.query<{ id: string; quote_id: string }>(
+      'SELECT id, quote_id FROM orders WHERE cart_id = $1',
+      [cartId],
+    );
+    if (existing.rows.length === 0 || existing.rows[0]!.quote_id !== quoteId) throw Errors.cartAlreadyCheckedOut();
+    return { replayed: true, order: await loadOrder(client, existing.rows[0]!.id) };
+  }
 
   // 3. The quote must exist and belong to this cart.
   const quoteResult = await client.query<QuoteRow>(

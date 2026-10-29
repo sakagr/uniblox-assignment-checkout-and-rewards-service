@@ -3,7 +3,7 @@
 // No direct stock SQL in this file; prices changed by a test are restored in `finally`.
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { cartWith, confirm, createTestApp, requestQuote, setupTestDb } from './helpers.js';
+import { cartWith, confirm, createTestApp, expectInvariants, requestQuote, setupTestDb } from './helpers.js';
 
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
 
@@ -110,6 +110,47 @@ describe('POST /carts/:cartId/checkout', () => {
   });
 });
 
+describe('replay', () => {
+  it('answers a retry of the same quote with 200, the header and an identical body', async () => {
+    const cartId = await cartWith(ctx.app, ['sku-mug', 2]);
+    const quoteId = await quoteFor(cartId);
+    const stockBefore = (await scalar("SELECT stock FROM products WHERE id = 'sku-mug'")).stock as number;
+    const ordersBefore = (await scalar('SELECT count(*)::int AS n FROM orders')).n as number;
+
+    const first = await confirm(ctx.app, cartId, quoteId);
+    const second = await confirm(ctx.app, cartId, quoteId);
+    const third = await confirm(ctx.app, cartId, quoteId);
+
+    expect(first.statusCode).toBe(201);
+    for (const replay of [second, third]) {
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers['idempotent-replayed']).toBe('true');
+      expect(replay.json()).toEqual(first.json());
+    }
+    // One order and one decrement, however many retries.
+    expect((await scalar('SELECT count(*)::int AS n FROM orders')).n).toBe(ordersBefore + 1);
+    expect((await scalar("SELECT stock FROM products WHERE id = 'sku-mug'")).stock).toBe(stockBefore - 2);
+  });
+
+  it('409s a different quote on a checked-out cart, and still replays the original', async () => {
+    const cartId = await cartWith(ctx.app, ['sku-tshirt', 1]);
+    const winning = await quoteFor(cartId);
+    const other = await quoteFor(cartId); // same cart version, so it would otherwise be valid
+    const placed = await confirm(ctx.app, cartId, winning);
+    expect(placed.statusCode).toBe(201);
+
+    for (const quoteId of [other, randomUUID()]) {
+      const res = await confirm(ctx.app, cartId, quoteId);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe('CART_ALREADY_CHECKED_OUT');
+      expect(res.headers['idempotent-replayed']).toBeUndefined();
+    }
+    const replay = await confirm(ctx.app, cartId, winning);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(placed.json());
+  });
+});
+
 describe('GET /orders/:orderId', () => {
   it('404s an unknown order and 400s a bad id', async () => {
     const missing = await ctx.app.inject({ method: 'GET', url: `/orders/${NO_SUCH_UUID}` });
@@ -135,4 +176,8 @@ describe('GET /orders/:orderId', () => {
       await ctx.pool.query("UPDATE products SET unit_price_paise = 19900 WHERE id = 'sku-notebook'");
     }
   });
+});
+
+describe('invariants', () => {
+  it('hold after everything above', () => expectInvariants(ctx.pool));
 });
