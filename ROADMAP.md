@@ -124,8 +124,8 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
 - [x] Replay: same quote on a checked-out cart gives 200 with `Idempotent-Replayed: true` and an identical body; a different quote gives 409
 - [ ] Stale quote: version mismatch gives `QUOTE_STALE` / `CART_CHANGED`; price mismatch (checked after the product locks) gives `PRICE_CHANGED` with a per-line diff
 - [ ] Coupon redeemed by conditional update; stock decremented by conditional update; counter incremented last
-- [ ] Order and line snapshots inserted; cart set to `CHECKED_OUT`; milestone coupon auto-generated with `ON CONFLICT (milestone) DO NOTHING` when enabled
-- [ ] `GET /orders/:orderId` returns the §5.2 Order shape, including `couponApplied` and `earnedCoupon`
+- [x] Order and line snapshots inserted; cart set to `CHECKED_OUT`; milestone coupon auto-generated with `ON CONFLICT (milestone) DO NOTHING` when enabled
+- [x] `GET /orders/:orderId` returns the §5.2 Order shape, including `couponApplied` and `earnedCoupon`
 - [x] After confirm, `GET /carts/{id}` returns `CHECKED_OUT` and `orderId` equal to the created order
 - [x] Make `insertOrderFixture` (in `test/helpers.ts`) a coherent order, so the T15 invariant checker and T14 report reconciliation hold with fixtures present:
   - one `order_lines` row: `sku-sticker-pack`, quantity 1, at its current price
@@ -151,6 +151,8 @@ Give the administrator manual coupon generation (a backfill for missed milestone
 - [ ] `GET /admin/coupons?status=` and `GET /admin/orders`
 - [ ] Tests pass:
   - T12: 10 parallel generate calls with auto-generation off give exactly one coupon per milestone
+  - T11 remainder: after an auto-generated coupon, `POST /admin/coupons` returns 409 `NO_ELIGIBLE_MILESTONE` (the part of T11 that needs this endpoint)
+  - With auto-generation off, an admin backfill of a milestone makes `GET /orders/:id` for the milestone order show `earnedCoupon` (it was `null` before; task 7 pins the `null` side)
 - [ ] Committed
 
 ## 9. Admin report

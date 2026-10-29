@@ -1,11 +1,15 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import type pg from 'pg';
+import type { Config } from '../../config.js';
 import { withTransaction } from '../../db/tx.js';
 import { CartParams } from '../carts/schemas.js';
 import { ConfirmBody, ConfirmResponse, Quote, QuoteBody } from './schemas.js';
 import { confirmCheckout, createQuote } from './service.js';
 
-export const checkoutRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool }> = async (app, { pool }) => {
+export const checkoutRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Config }> = async (
+  app,
+  { pool, config },
+) => {
   app.post(
     '/carts/:cartId/checkout/quote',
     {
@@ -45,7 +49,7 @@ export const checkoutRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool }> = asyn
     },
     async (request, reply) => {
       const { replayed, order } = await withTransaction(pool, (client) =>
-        confirmCheckout(client, request.params.cartId, request.body.quoteId),
+        confirmCheckout(client, request.params.cartId, request.body.quoteId, config),
       );
       if (replayed) reply.header('Idempotent-Replayed', 'true');
       return reply.status(replayed ? 200 : 201).send({ order, earnedCoupon: order.earnedCoupon });

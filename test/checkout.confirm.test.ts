@@ -1,4 +1,5 @@
 // Stock ownership (orders are insert-only, so consumed stock cannot be restored):
+//   sku-sticker-pack     shared filler for placeSticker / earnCoupon (never drained)
 //   sku-mug, sku-tshirt, sku-notebook   small non-draining quantities
 // No direct stock SQL in this file; prices changed by a test are restored in `finally`.
 import { randomUUID } from 'node:crypto';
@@ -20,6 +21,32 @@ const quoteFor = async (cartId: string, couponCode?: string): Promise<string> =>
   const res = await requestQuote(ctx.app, cartId, couponCode);
   expect(res.statusCode).toBe(201);
   return res.json().quoteId;
+};
+
+type App = typeof ctx.app;
+
+/** Places a one-sticker-pack order and returns the confirm body. */
+const placeSticker = async (app: App = ctx.app): Promise<{ order: { id: string; placementNumber: number }; earnedCoupon: { code: string; percent: number; milestone: number } | null }> => {
+  const cartId = await cartWith(app, ['sku-sticker-pack', 1]);
+  const quote = await requestQuote(app, cartId);
+  const res = await confirm(app, cartId, quote.json().quoteId);
+  expect(res.statusCode).toBe(201);
+  return res.json();
+};
+
+/**
+ * Places orders until one earns a coupon and returns it. With n = 3 and auto-generation on
+ * that takes at most 3 orders; if it does not, auto-generation is broken, so fail loudly
+ * instead of looping on.
+ */
+const earnCoupon = async () => {
+  const placements: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const placed = await placeSticker();
+    placements.push(placed.order.placementNumber);
+    if (placed.earnedCoupon) return { ...placed, code: placed.earnedCoupon.code };
+  }
+  throw new Error(`earnCoupon: no coupon earned within 3 orders (n = 3, auto on); placements: ${placements.join(', ')}`);
 };
 
 const scalar = async (sql: string, params: unknown[] = []) =>
@@ -174,6 +201,69 @@ describe('GET /orders/:orderId', () => {
       expect(fetched.json().lines[0]).toMatchObject({ unitPricePaise: 19900, lineTotalPaise: 59700 });
     } finally {
       await ctx.pool.query("UPDATE products SET unit_price_paise = 19900 WHERE id = 'sku-notebook'");
+    }
+  });
+});
+
+describe('milestone coupon', () => {
+  it('T11: the nth placement earns a coupon, shown on the response, the order and its replay', async () => {
+    const earned = await earnCoupon();
+    const { order, earnedCoupon } = earned;
+    expect(order.placementNumber % 3).toBe(0);
+    expect(earnedCoupon).toEqual({ code: earned.code, percent: 10, milestone: order.placementNumber / 3 });
+
+    // Stored as an AUTO coupon linked to the order that earned it, still unspent.
+    const row = await scalar(
+      'SELECT percent, milestone, milestone_order_id, source, redeemed_order_id FROM coupons WHERE code = $1',
+      [earned.code],
+    );
+    expect(row).toEqual({
+      percent: 10,
+      milestone: order.placementNumber / 3,
+      milestone_order_id: order.id,
+      source: 'AUTO',
+      redeemed_order_id: null,
+    });
+
+    // GET /orders/:id and a replay of the confirm show the same earned coupon (D2).
+    const fetched = await ctx.app.inject({ method: 'GET', url: `/orders/${order.id}` });
+    expect(fetched.json().earnedCoupon).toEqual(earnedCoupon);
+    const replay = await confirm(ctx.app, fetched.json().cartId, fetched.json().quoteId);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().earnedCoupon).toEqual(earnedCoupon);
+  });
+
+  it('earns nothing on placements that are not a multiple of n', async () => {
+    const orders = [];
+    for (let i = 0; i < 3; i++) orders.push(await placeSticker());
+    for (const { order, earnedCoupon } of orders) {
+      expect(earnedCoupon === null).toBe(order.placementNumber % 3 !== 0);
+    }
+    expect(orders.filter((o) => o.earnedCoupon !== null)).toHaveLength(1);
+  });
+
+  it('with auto-generation off, the nth placement earns no coupon and creates no coupon row', async () => {
+    const off = await createTestApp({ couponEveryNOrders: 3, autoGenerateCoupons: false });
+    try {
+      let milestoneOrder: { id: string; placementNumber: number } | undefined;
+      for (let i = 0; i < 3 && !milestoneOrder; i++) {
+        const placed = await placeSticker(off.app);
+        if (placed.order.placementNumber % 3 === 0) {
+          milestoneOrder = placed.order;
+          expect(placed.earnedCoupon).toBeNull();
+        }
+      }
+      expect(milestoneOrder, 'no multiple of 3 placed in 3 orders').toBeDefined();
+
+      const coupons = await scalar(
+        'SELECT count(*)::int AS n FROM coupons WHERE milestone = $1 OR milestone_order_id = $2',
+        [milestoneOrder!.placementNumber / 3, milestoneOrder!.id],
+      );
+      expect(coupons.n).toBe(0);
+      const fetched = await off.app.inject({ method: 'GET', url: `/orders/${milestoneOrder!.id}` });
+      expect(fetched.json().earnedCoupon).toBeNull();
+    } finally {
+      await off.close();
     }
   });
 });

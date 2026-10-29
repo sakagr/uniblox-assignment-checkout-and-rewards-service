@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
-import { normalizeCouponCode } from '../../domain/coupon-code.js';
+import type { Config } from '../../config.js';
+import { generateCouponCode, normalizeCouponCode } from '../../domain/coupon-code.js';
 import { Errors, type PriceChange, type StockShortfall } from '../../domain/errors.js';
 import { calculateTotals, paise } from '../../domain/money.js';
 import { loadCartItems } from '../carts/service.js';
@@ -120,7 +121,14 @@ interface QuoteLineRow {
  * so reading the quote after the cart lock does not change that order.
  * Any error rolls the whole transaction back, so nothing is half-applied.
  */
-export async function confirmCheckout(client: pg.PoolClient, cartId: string, quoteId: string) {
+export type MilestoneConfig = Pick<Config, 'couponEveryNOrders' | 'couponPercent' | 'autoGenerateCoupons'>;
+
+export async function confirmCheckout(
+  client: pg.PoolClient,
+  cartId: string,
+  quoteId: string,
+  config: MilestoneConfig,
+) {
   // 1. Lock the cart. This serializes confirms and item edits on this cart.
   const cart = await client.query<{ status: 'OPEN' | 'CHECKED_OUT'; version: number }>(
     'SELECT status, version FROM carts WHERE id = $1 FOR UPDATE',
@@ -282,6 +290,16 @@ export async function confirmCheckout(client: pg.PoolClient, cartId: string, quo
     ],
   );
   await client.query("UPDATE carts SET status = 'CHECKED_OUT', updated_at = now() WHERE id = $1", [cartId]);
+
+  // 11. Every nth placement earns a coupon. ON CONFLICT (milestone) DO NOTHING means coupon
+  //     generation can never fail an order (an admin backfill may have made it already, D6).
+  if (config.autoGenerateCoupons && placementNumber % config.couponEveryNOrders === 0) {
+    await client.query(
+      `INSERT INTO coupons (code, percent, milestone, milestone_order_id, source)
+       VALUES ($1, $2, $3, $4, 'AUTO') ON CONFLICT (milestone) DO NOTHING`,
+      [generateCouponCode(), config.couponPercent, placementNumber / config.couponEveryNOrders, orderId],
+    );
+  }
 
   return { replayed: false, order: await loadOrder(client, orderId) };
 }

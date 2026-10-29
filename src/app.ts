@@ -23,7 +23,7 @@ export interface AppDeps {
  * Builds the Fastify instance without calling ready(), so tests can add
  * routes first. Route modules (tasks 5+) receive `config` and `pool` directly.
  */
-export async function buildApp({ pool, logger = false }: AppDeps) {
+export async function buildApp({ config, pool, logger = false }: AppDeps) {
   const app = Fastify({
     logger,
     ajv: {
@@ -61,7 +61,7 @@ export async function buildApp({ pool, logger = false }: AppDeps) {
 
   await app.register(productRoutes, { pool });
   await app.register(cartRoutes, { pool });
-  await app.register(checkoutRoutes, { pool });
+  await app.register(checkoutRoutes, { pool, config });
   await app.register(orderRoutes, { pool });
 
   return app;
