@@ -73,7 +73,7 @@ Add the shared building blocks every endpoint will use: config, database pool, t
 - [x] `src/domain/money.ts`: `Paise`, `paise()`, `calculateTotals()` (floor discount), `formatInr()`
 - [x] `src/domain/coupon-code.ts`: Crockford base32 generator and `normalizeCouponCode()`
 - [x] `src/domain/errors.ts`: a `DomainError` factory for every §5.4 code
-- [x] `src/http/error-handler.ts`: envelope for domain errors, validation errors (400), transient pg errors (503) and unknown errors (500); `ROUTE_NOT_FOUND` for unknown routes, flagged for the spec
+- [x] `src/http/error-handler.ts`: envelope for domain errors, validation errors (400), transient pg errors (503) and unknown errors (500); `ROUTE_NOT_FOUND` for unknown routes (added to SPECIFICATIONS §5.4 in task 7)
 - [x] `src/app.ts`: `buildApp({ config, pool })` with swagger at `/docs`, `GET /health`, Ajv `coerceTypes: false` and `removeAdditional: false`
 - [x] `src/server.ts`: listens on PORT; graceful shutdown on SIGINT and SIGTERM; `npm run dev` and `npm start` work
 - [x] `test/helpers.ts`: `setupTestDb`, `createTestApp(overrides)`, `parallel(n, fn)`, teardown
@@ -225,7 +225,7 @@ Bring the decision record in line with what was actually built. This document is
   - the fixture coupon code containing `U`
   - the `pg_isready` socket-vs-TCP healthcheck race
 - [ ] §10 updated with what the sanity check (task 10) revealed
-- [ ] Approved spec edits applied (e.g. `ROUTE_NOT_FOUND`); spec and code agree
+- [ ] Approved spec edits applied (`ROUTE_NOT_FOUND` was already added to §5.4 in task 7); spec and code agree
 - [ ] Approximate time spent filled in
 - [ ] Committed
 

@@ -332,7 +332,7 @@ Prices and stock are always the **current** values. `orderId` is set once the ca
 - **Errors:**
   - 400 `VALIDATION_ERROR`
   - 404 `CART_NOT_FOUND`
-  - 404 `QUOTE_NOT_FOUND` (also returned when the quote belongs to another cart)
+  - 404 `QUOTE_NOT_FOUND` (also returned when the quote belongs to another cart). On a checked-out cart an unknown quote is not looked up: it returns 409 `CART_ALREADY_CHECKED_OUT` instead (§6.3)
   - 409 `CART_ALREADY_CHECKED_OUT` (checked out with a different quote)
   - 409 `QUOTE_STALE`, with details `{reason: "CART_CHANGED"}` or `{reason: "PRICE_CHANGED", changes: [{productId, quotedPaise, currentPaise}]}`
   - 409 `COUPON_ALREADY_REDEEMED`

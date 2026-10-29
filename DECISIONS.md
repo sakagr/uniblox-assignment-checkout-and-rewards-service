@@ -372,7 +372,7 @@ Any failure in steps 2–8 rolls back everything: stock, coupon redemption, coun
 | HTTP | Code | When |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Schema failure: malformed body, non-integer quantity or one outside 0..1000, bad UUID (details: field errors) |
-| 404 | `CART_NOT_FOUND`, `ORDER_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `QUOTE_NOT_FOUND` | A referenced resource does not exist. A quote that belongs to another cart counts as not found. |
+| 404 | `CART_NOT_FOUND`, `ORDER_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `QUOTE_NOT_FOUND` | A referenced resource does not exist. A quote that belongs to another cart counts as not found. Exception: on a checked-out cart, any quote other than the one that produced the order (unknown or another cart's) is 409 `CART_ALREADY_CHECKED_OUT`. |
 | 409 | `CART_ALREADY_CHECKED_OUT` | Mutating or quoting a checked-out cart, or confirming it with a different quote |
 | 409 | `INSUFFICIENT_STOCK` | Item soft check, quote, or confirm (details: `[{productId, requested, available}]`) |
 | 409 | `COUPON_ALREADY_REDEEMED` | The coupon has already been used (quote or confirm) |
