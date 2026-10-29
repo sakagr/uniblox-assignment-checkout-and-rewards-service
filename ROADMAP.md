@@ -21,7 +21,7 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 6 | Checkout quote | 30 min | ✅ Done |
 | 7 | Place orders (confirm checkout) | 75 min | ✅ Done |
 | 8 | Admin coupons and order list | 30 min | ✅ Done |
-| 9 | Admin report | 20 min | ⬜ |
+| 9 | Admin report | 20 min | ✅ Done |
 | 10 | Harden with concurrency tests | 50 min | ⬜ |
 | 11 | Write the README and API docs | 30 min | ⬜ |
 | 12 | Finish DECISIONS.md | 30 min | ⬜ |
@@ -155,16 +155,16 @@ Give the administrator manual coupon generation (a backfill for missed milestone
   - [x] With auto-generation off, an admin backfill of a milestone makes `GET /orders/:id` for the milestone order show `earnedCoupon` (it was `null` before; task 7 pins the `null` side)
 - [x] Committed
 
-## 9. Admin report
+## 9. Admin report ✅
 
 Return the sales and coupon summary, consistent with the orders and coupons the API returns.
 
 **Done when**
-- [ ] `GET /admin/report` runs in REPEATABLE READ READ ONLY (§6.5)
-- [ ] Includes every product (0 if unsold), gross, discount, net, coupon counts, and placed orders
-- [ ] Tests pass:
+- [x] `GET /admin/report` runs in REPEATABLE READ READ ONLY (§6.5)
+- [x] Includes every product (0 if unsold), gross, discount, net, coupon counts, and placed orders
+- [x] Tests pass:
   - T14: report reconciles with `/admin/orders` and `/admin/coupons` after a mixed run; two calls give the same body and change no rows
-- [ ] Committed
+- [x] Committed
 
 ## 10. Harden with concurrency tests
 

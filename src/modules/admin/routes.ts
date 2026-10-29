@@ -2,8 +2,8 @@ import { Type, type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typ
 import type pg from 'pg';
 import type { Config } from '../../config.js';
 import { withTransaction } from '../../db/tx.js';
-import { AdminOrder, Coupon, CouponListQuery, GenerateCouponResponse } from './schemas.js';
-import { generateMilestoneCoupon, listCoupons, listOrders } from './service.js';
+import { AdminOrder, Coupon, CouponListQuery, GenerateCouponResponse, Report } from './schemas.js';
+import { buildReport, generateMilestoneCoupon, listCoupons, listOrders } from './service.js';
 
 /** Admin-only endpoints (no authentication, DECISIONS §7). */
 export const adminRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Config }> = async (
@@ -48,5 +48,17 @@ export const adminRoutes: FastifyPluginAsyncTypebox<{ pool: pg.Pool; config: Con
       },
     },
     () => listOrders(pool),
+  );
+
+  app.get(
+    '/admin/report',
+    {
+      schema: {
+        tags: ['admin'],
+        summary: '(admin) Sales and coupon summary',
+        response: { 200: Report },
+      },
+    },
+    () => withTransaction(pool, buildReport, { isolation: 'REPEATABLE READ', readOnly: true }),
   );
 };

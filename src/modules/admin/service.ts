@@ -125,3 +125,41 @@ export async function listOrders(pool: pg.Pool) {
     currency: 'INR' as const,
   }));
 }
+
+/**
+ * §6.5. Run in REPEATABLE READ READ ONLY: the three queries share one snapshot, so the figures
+ * agree with each other (net = gross - discount, generated = available + redeemed). sum() and
+ * count() arrive as numeric / int8 and go through the pool's safe-integer parser.
+ */
+export async function buildReport(client: pg.PoolClient) {
+  const totals = await client.query<{ placed_orders: number; gross: number; discount: number; net: number }>(
+    `SELECT count(*) AS placed_orders,
+            COALESCE(sum(subtotal_paise), 0) AS gross,
+            COALESCE(sum(discount_paise), 0) AS discount,
+            COALESCE(sum(total_paise), 0)    AS net
+       FROM orders`,
+  );
+  const sold = await client.query<{ id: string; name: string; quantity: number }>(
+    `SELECT p.id, p.name, COALESCE(sum(ol.quantity), 0) AS quantity
+       FROM products p LEFT JOIN order_lines ol ON ol.product_id = p.id
+      GROUP BY p.id, p.name ORDER BY p.id`,
+  );
+  const coupons = await client.query<{ generated: number; available: number; redeemed: number }>(
+    `SELECT count(*) AS generated,
+            count(*) FILTER (WHERE redeemed_order_id IS NULL)     AS available,
+            count(*) FILTER (WHERE redeemed_order_id IS NOT NULL) AS redeemed
+       FROM coupons`,
+  );
+  const t = totals.rows[0]!;
+  const c = coupons.rows[0]!;
+  return {
+    placedOrders: t.placed_orders,
+    productsSold: sold.rows.map((p) => ({ productId: p.id, name: p.name, quantity: p.quantity })),
+    grossRevenuePaise: t.gross,
+    totalDiscountPaise: t.discount,
+    netRevenuePaise: t.net,
+    coupons: { generated: c.generated, available: c.available, redeemed: c.redeemed },
+    currency: 'INR' as const,
+    generatedAt: new Date().toISOString(),
+  };
+}

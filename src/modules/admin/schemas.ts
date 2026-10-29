@@ -33,3 +33,16 @@ export const AdminOrder = Type.Object({
   createdAt: Type.String({ format: 'date-time' }),
   currency: Type.Literal('INR'),
 });
+
+export const Report = Type.Object({
+  placedOrders: Type.Integer(),
+  productsSold: Type.Array(
+    Type.Object({ productId: Type.String(), name: Type.String(), quantity: Type.Integer() }),
+  ),
+  grossRevenuePaise: Type.Integer(),
+  totalDiscountPaise: Type.Integer(),
+  netRevenuePaise: Type.Integer(),
+  coupons: Type.Object({ generated: Type.Integer(), available: Type.Integer(), redeemed: Type.Integer() }),
+  currency: Type.Literal('INR'),
+  generatedAt: Type.String({ format: 'date-time' }),
+});
