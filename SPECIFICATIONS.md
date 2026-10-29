@@ -53,9 +53,11 @@ store_stats (single row: placed_orders counter)
 
 File: `migrations/001_schema.sql`.
 
-```sql
-BEGIN;
+migrations/001_schema.sql contains exactly this DDL (plus a header comment).
+The migration runner wraps each file in its own transaction together with its
+schema_migrations row, so the file has no BEGIN/COMMIT of its own.
 
+```sql
 -- ─────────────────────────────────────────────────────────────
 -- Products
 -- ─────────────────────────────────────────────────────────────
@@ -101,8 +103,8 @@ CREATE TABLE coupons (
   redeemed_order_id   uuid        UNIQUE,                                        -- I5 backstop
   redeemed_at         timestamptz,
   created_at          timestamptz NOT NULL DEFAULT now(),
-  CHECK ((redeemed_order_id IS NULL) = (redeemed_at IS NULL)),
-  CHECK (redeemed_order_id IS DISTINCT FROM milestone_order_id)                  -- an order cannot spend the coupon it earned
+  CONSTRAINT coupons_redeemed_fields_together CHECK ((redeemed_order_id IS NULL) = (redeemed_at IS NULL)),
+  CONSTRAINT coupons_not_spent_by_earning_order CHECK (redeemed_order_id IS DISTINCT FROM milestone_order_id)  -- an order cannot spend the coupon it earned
 );
 
 -- ─────────────────────────────────────────────────────────────
@@ -115,11 +117,11 @@ CREATE TABLE checkout_quotes (
   coupon_id       uuid        REFERENCES coupons(id),
   coupon_percent  smallint    CHECK (coupon_percent BETWEEN 1 AND 100),
   subtotal_paise  bigint      NOT NULL CHECK (subtotal_paise > 0),
-  discount_paise  bigint      NOT NULL CHECK (discount_paise >= 0 AND discount_paise <= subtotal_paise),
-  total_paise     bigint      NOT NULL CHECK (total_paise = subtotal_paise - discount_paise),
+  discount_paise  bigint      NOT NULL CONSTRAINT checkout_quotes_discount_within_subtotal CHECK (discount_paise >= 0 AND discount_paise <= subtotal_paise),
+  total_paise     bigint      NOT NULL CONSTRAINT checkout_quotes_total_consistent CHECK (total_paise = subtotal_paise - discount_paise),
   created_at      timestamptz NOT NULL DEFAULT now(),
-  CHECK ((coupon_id IS NULL) = (coupon_percent IS NULL)),
-  CHECK (coupon_id IS NOT NULL OR discount_paise = 0),
+  CONSTRAINT checkout_quotes_coupon_fields_together CHECK ((coupon_id IS NULL) = (coupon_percent IS NULL)),
+  CONSTRAINT checkout_quotes_discount_requires_coupon CHECK (coupon_id IS NOT NULL OR discount_paise = 0),
   UNIQUE (id, cart_id)                                                           -- target for orders' composite FK
 );
 CREATE INDEX checkout_quotes_cart_idx ON checkout_quotes (cart_id);
@@ -130,7 +132,7 @@ CREATE TABLE quote_lines (
   product_name      text    NOT NULL,
   unit_price_paise  bigint  NOT NULL CHECK (unit_price_paise > 0),
   quantity          integer NOT NULL CHECK (quantity BETWEEN 1 AND 1000),
-  line_total_paise  bigint  NOT NULL CHECK (line_total_paise = unit_price_paise * quantity),
+  line_total_paise  bigint  NOT NULL CONSTRAINT quote_lines_line_total_consistent CHECK (line_total_paise = unit_price_paise * quantity),
   PRIMARY KEY (quote_id, product_id)
 );
 
@@ -145,11 +147,11 @@ CREATE TABLE orders (
   subtotal_paise    bigint      NOT NULL CHECK (subtotal_paise > 0),
   coupon_code       text,                                                        -- snapshot, not FK (authority is coupons.redeemed_order_id)
   coupon_percent    smallint    CHECK (coupon_percent BETWEEN 1 AND 100),
-  discount_paise    bigint      NOT NULL CHECK (discount_paise >= 0 AND discount_paise <= subtotal_paise),  -- I8
-  total_paise       bigint      NOT NULL CHECK (total_paise = subtotal_paise - discount_paise),             -- I8
+  discount_paise    bigint      NOT NULL CONSTRAINT orders_discount_within_subtotal CHECK (discount_paise >= 0 AND discount_paise <= subtotal_paise),  -- I8
+  total_paise       bigint      NOT NULL CONSTRAINT orders_total_consistent CHECK (total_paise = subtotal_paise - discount_paise),             -- I8
   created_at        timestamptz NOT NULL DEFAULT now(),
-  CHECK ((coupon_code IS NULL) = (coupon_percent IS NULL)),
-  CHECK (coupon_code IS NOT NULL OR discount_paise = 0),
+  CONSTRAINT orders_coupon_fields_together CHECK ((coupon_code IS NULL) = (coupon_percent IS NULL)),
+  CONSTRAINT orders_discount_requires_coupon CHECK (coupon_code IS NOT NULL OR discount_paise = 0),
   FOREIGN KEY (quote_id, cart_id) REFERENCES checkout_quotes (id, cart_id)      -- the quote must belong to this cart
 );
 
@@ -159,7 +161,7 @@ CREATE TABLE order_lines (
   product_name      text    NOT NULL,                                            -- snapshot
   unit_price_paise  bigint  NOT NULL CHECK (unit_price_paise > 0),               -- snapshot
   quantity          integer NOT NULL CHECK (quantity BETWEEN 1 AND 1000),
-  line_total_paise  bigint  NOT NULL CHECK (line_total_paise = unit_price_paise * quantity),  -- I8
+  line_total_paise  bigint  NOT NULL CONSTRAINT order_lines_line_total_consistent CHECK (line_total_paise = unit_price_paise * quantity),  -- I8
   PRIMARY KEY (order_id, product_id)
 );
 CREATE INDEX order_lines_product_idx ON order_lines (product_id);
@@ -184,8 +186,6 @@ ALTER TABLE coupons
 ALTER TABLE coupons
   ADD CONSTRAINT coupons_milestone_order_fk
   FOREIGN KEY (milestone_order_id) REFERENCES orders(id);
-
-COMMIT;
 ```
 
 **Notes on the schema**
