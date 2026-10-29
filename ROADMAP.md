@@ -67,7 +67,7 @@ Run Postgres locally and create the schema and seed data through migrations.
 Add the shared building blocks every endpoint will use: config, database pool, transactions, money maths, coupon codes, errors, and the Fastify app with `/health`.
 
 **Done when**
-- [ ] `src/config.ts`: every §1 variable parsed and validated; bad values fail fast with the variable named
+- [x] `src/config.ts`: every §1 variable parsed and validated; bad values fail fast with the variable named
 - [ ] `src/db/pool.ts`: int8 and numeric parsed through one safe-integer parser (per-pool `types`, not global)
 - [ ] `src/db/tx.ts`: `withTransaction` with isolation and read-only options; a failed ROLLBACK destroys the client; lock-order comment (D9)
 - [x] `src/domain/money.ts`: `Paise`, `paise()`, `calculateTotals()` (floor discount), `formatInr()`
