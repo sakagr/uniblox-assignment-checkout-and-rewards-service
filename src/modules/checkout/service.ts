@@ -291,8 +291,11 @@ export async function confirmCheckout(
   );
   await client.query("UPDATE carts SET status = 'CHECKED_OUT', updated_at = now() WHERE id = $1", [cartId]);
 
-  // 11. Every nth placement earns a coupon. ON CONFLICT (milestone) DO NOTHING means coupon
-  //     generation can never fail an order (an admin backfill may have made it already, D6).
+  // 11. Every nth placement earns a coupon. An admin backfill cannot create this milestone first:
+  //     admin generation takes the store_stats lock, which this transaction holds, so admin sees
+  //     placed_orders = k*n - 1 and gets 409. ON CONFLICT (milestone) DO NOTHING is therefore
+  //     defensive: it only fires if n changed between runs, or a fixture claimed the milestone.
+  //     It guarantees coupon generation never fails an order.
   if (config.autoGenerateCoupons && placementNumber % config.couponEveryNOrders === 0) {
     await client.query(
       `INSERT INTO coupons (code, percent, milestone, milestone_order_id, source)
