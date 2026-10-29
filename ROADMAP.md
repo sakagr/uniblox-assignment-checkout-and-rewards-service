@@ -16,7 +16,7 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 1 | Design the system | n/a | ✅ Done |
 | 2 | Set up the TypeScript project | n/a | ✅ Done |
 | 3 | Set up the database | n/a | ✅ Done |
-| 4 | Build the app foundation | 45 min | ⬜ |
+| 4 | Build the app foundation | 45 min | ✅ Done |
 | 5 | Products and carts | 40 min | ⬜ |
 | 6 | Checkout quote | 30 min | ⬜ |
 | 7 | Place orders (confirm checkout) | 75 min | ⬜ |
@@ -62,7 +62,7 @@ Run Postgres locally and create the schema and seed data through migrations.
 - [x] Constraint probe: every bad write rejected by the intended constraint; deferred FK commits when valid and fails at COMMIT when dangling
 - [x] Committed
 
-## 4. Build the app foundation
+## 4. Build the app foundation ✅
 
 Add the shared building blocks every endpoint will use: config, database pool, transactions, money maths, coupon codes, errors, and the Fastify app with `/health`.
 
@@ -73,11 +73,11 @@ Add the shared building blocks every endpoint will use: config, database pool, t
 - [x] `src/domain/money.ts`: `Paise`, `paise()`, `calculateTotals()` (floor discount), `formatInr()`
 - [x] `src/domain/coupon-code.ts`: Crockford base32 generator and `normalizeCouponCode()`
 - [x] `src/domain/errors.ts`: a `DomainError` factory for every §5.4 code
-- [ ] `src/http/error-handler.ts`: envelope for domain errors, validation errors (400), transient pg errors (503) and unknown errors (500); `ROUTE_NOT_FOUND` for unknown routes, flagged for the spec
-- [ ] `src/app.ts`: `buildApp({ config, pool })` with swagger at `/docs`, `GET /health`, Ajv `coerceTypes: false` and `removeAdditional: false`
-- [ ] `src/server.ts`: listens on PORT; graceful shutdown on SIGINT and SIGTERM; `npm run dev` and `npm start` work
-- [ ] `test/helpers.ts`: `setupTestDb`, `createTestApp(overrides)`, `parallel(n, fn)`, teardown
-- [ ] Tests pass:
+- [x] `src/http/error-handler.ts`: envelope for domain errors, validation errors (400), transient pg errors (503) and unknown errors (500); `ROUTE_NOT_FOUND` for unknown routes, flagged for the spec
+- [x] `src/app.ts`: `buildApp({ config, pool })` with swagger at `/docs`, `GET /health`, Ajv `coerceTypes: false` and `removeAdditional: false`
+- [x] `src/server.ts`: listens on PORT; graceful shutdown on SIGINT and SIGTERM; `npm run dev` and `npm start` work
+- [x] `test/helpers.ts`: `setupTestDb`, `createTestApp(overrides)`, `parallel(n, fn)`, teardown
+- [x] Tests pass:
   - T1 money table
   - coupon-code format and uniqueness
   - `/health`
@@ -85,7 +85,7 @@ Add the shared building blocks every endpoint will use: config, database pool, t
   - bigint parser bounds
   - `withTransaction` rollback
   - `"5"` rejected for an integer body field
-- [ ] Committed in increments
+- [x] Committed in increments
 
 ## 5. Products and carts
 
