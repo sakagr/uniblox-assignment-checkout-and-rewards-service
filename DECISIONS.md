@@ -311,10 +311,11 @@ The cart version is captured with the items it describes, so any later edit is c
 
 **Confirm (`POST /carts/{id}/checkout`, single transaction):**
 
-1. **Load the quote.** It must belong to this cart, otherwise 404 `QUOTE_NOT_FOUND`.
-2. **Lock the cart.** `SELECT ... FROM carts WHERE id = $1 FOR UPDATE`.
+1. **Lock the cart.** `SELECT ... FROM carts WHERE id = $1 FOR UPDATE`.
+   - Missing cart: 404 `CART_NOT_FOUND`.
    - `CHECKED_OUT` with `orders.quote_id = quoteId`: replay with 200.
-   - `CHECKED_OUT` with a different quote: 409 `CART_ALREADY_CHECKED_OUT`.
+   - `CHECKED_OUT` with any other quote, including an unknown one: 409 `CART_ALREADY_CHECKED_OUT`.
+2. **Load the quote.** It must belong to this cart, otherwise 404 `QUOTE_NOT_FOUND`. Quote rows are only read, never locked, so the lock order is unchanged.
    - Version differs from the quote: 409 `QUOTE_STALE` (`CART_CHANGED`).
 3. **Redeem the coupon** (if the quote has one). Generate `orderId` (UUID) in the app, then run the conditional redeem. Zero rows: 409 `COUPON_ALREADY_REDEEMED`.
 4. **Lock and check products.**

@@ -188,11 +188,13 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
 - [x] Note in the `insertCouponFixture` doc comment that its milestones are not aligned with placement k × n, so it must not be used in admin-generation tests (task 8)
 - [ ] Fix the `export const CartLine =Type.Object(` spacing in `src/modules/carts/schemas.ts`
 - [ ] Sanity checks, done locally and not committed. For each, break the guard, confirm the named test fails, then restore it:
-  - remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail
-  - remove `AND redeemed_order_id IS NULL` from the coupon redeem: T6 must fail (two orders carry the coupon)
-  - remove **both** stock defences in confirm (the under-lock stock check and `AND stock >= $qty`): T5 must fail; the `CHECK (stock >= 0)` turns the oversell into a 500 instead of a 409
-  - expect layered defences: removing only one stock defence is caught by the other, and nothing should fail. Record that as intended defence in depth, not as a test gap
-  - note which test caught each one, for DECISIONS §10
+  - [ ] remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail. Still to do: the T4 run in task 7 covers confirm's cart lock, not item edits
+  - [x] remove `AND redeemed_order_id IS NULL` from the coupon redeem: **T6 failed**, as intended (done in task 7)
+  - [x] remove **both** stock defences in confirm (the under-lock stock check and `AND stock >= $qty`): **T5 failed**, as intended (done in task 7)
+  - [x] swap the PRICE_CHANGED and INSUFFICIENT_STOCK checks: the precedence test ("reports PRICE_CHANGED before INSUFFICIENT_STOCK when both apply") failed, as intended (done in task 7)
+  - [x] remove the cart `FOR UPDATE` in confirm: **T4 failed** (no replays), as intended (done in task 7)
+  - [ ] remove only `AND stock >= $qty` and confirm every test still passes: the under-lock check catches the shortfall first. Record it as intended defence in depth, not a test gap
+  - [ ] note which test caught each one, for DECISIONS §10 (so far: T6, T5, the precedence test, T4)
 - [ ] Record in DECISIONS §9, as an AI suggestion that was corrected: the parallel-PUT test proposed for task 5 did not test the cart lock it was meant to prove
 - [ ] Committed
 

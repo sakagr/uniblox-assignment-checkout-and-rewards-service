@@ -269,7 +269,7 @@ Prices and stock are always the **current** values. `orderId` is set once the ca
   "currency": "INR", "createdAt": "…"
 }
 ```
-`couponApplied` and `earnedCoupon` are `null` when they don't apply. Every field is a snapshot, so the response never changes.
+`couponApplied` and `earnedCoupon` are `null` when they don't apply. Order fields are an immutable snapshot. `earnedCoupon` can change from `null` to a coupon later, only when auto-generation is off and an admin backfills the milestone.
 
 **Coupon (admin)**
 ```json
@@ -385,6 +385,7 @@ Prices and stock are always the **current** values. `orderId` is set once the ca
 | 404 | `PRODUCT_NOT_FOUND` | `PUT` item |
 | 404 | `QUOTE_NOT_FOUND` | Checkout |
 | 404 | `ORDER_NOT_FOUND` | `GET /orders/{id}` |
+| 404 | `ROUTE_NOT_FOUND` | Any unknown route (no handler matches) |
 | 409 | `CART_ALREADY_CHECKED_OUT` | Item endpoints, quote, checkout (with a different quote) |
 | 409 | `INSUFFICIENT_STOCK` | `PUT` item (soft), quote (advisory), checkout (authoritative) |
 | 409 | `COUPON_ALREADY_REDEEMED` | Quote, checkout |
@@ -445,15 +446,15 @@ A serialization failure here is not expected, because the transaction only inser
 ### 6.3 Confirm checkout, READ COMMITTED
 
 ```sql
--- 0. quote must exist and belong to this cart
+-- 0. lock cart
+SELECT status, version FROM carts WHERE id = $cartId FOR UPDATE;           -- none → CART_NOT_FOUND
+--    CHECKED_OUT: SELECT id, quote_id FROM orders WHERE cart_id = $cartId
+--                 → quote_id = $quoteId ? replay (200) : CART_ALREADY_CHECKED_OUT
+
+-- 1. quote must exist and belong to this cart (read only: quote rows are never locked)
 SELECT * FROM checkout_quotes WHERE id = $quoteId AND cart_id = $cartId;   -- none → QUOTE_NOT_FOUND
 SELECT * FROM quote_lines WHERE quote_id = $quoteId ORDER BY product_id;
-
--- 1. lock cart
-SELECT status, version FROM carts WHERE id = $cartId FOR UPDATE;
---    CHECKED_OUT: SELECT * FROM orders WHERE cart_id = $cartId
---                 → quote_id = $quoteId ? replay (200) : CART_ALREADY_CHECKED_OUT
---    version <> quote.cart_version → QUOTE_STALE (CART_CHANGED)
+--    cart.version <> quote.cart_version → QUOTE_STALE (CART_CHANGED)
 
 -- 2. redeem coupon (if quote.coupon_id); $orderId generated in app (crypto.randomUUID)
 UPDATE coupons SET redeemed_order_id = $orderId, redeemed_at = now()
@@ -489,6 +490,8 @@ RETURNING code, percent, milestone;
 
 COMMIT;   -- deferred FK coupons.redeemed_order_id → orders checked here
 ```
+
+The cart is locked before the quote is read so that an unknown cart is `CART_NOT_FOUND`. On a `CHECKED_OUT` cart the quote is not looked up at all: any quote other than the one that produced the order, including an unknown one or another cart's, returns 409 `CART_ALREADY_CHECKED_OUT`, not 404 `QUOTE_NOT_FOUND`. Reading the quote after the cart lock does not change the lock order, because quote rows are never locked.
 
 Because the cart items are only modified under the cart lock (§6.1), the items read after step 1 match the quote whenever the versions match. The implementation still asserts that the product and quantity sets are equal, as a defensive check.
 

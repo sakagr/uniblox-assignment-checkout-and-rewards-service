@@ -15,7 +15,6 @@ export type ErrorCode =
   | 'COUPON_INVALID'
   | 'TRANSIENT_CONFLICT'
   | 'INTERNAL_ERROR'
-  // Not in §5.4; proposed spec addition.
   | 'ROUTE_NOT_FOUND';
 
 export class DomainError extends Error {
