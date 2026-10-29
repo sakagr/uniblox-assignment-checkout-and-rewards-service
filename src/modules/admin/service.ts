@@ -85,3 +85,43 @@ export async function generateMilestoneCoupon(client: pg.PoolClient, config: Mil
 
   return { coupon: toCoupon(inserted.rows[0]!), pendingMilestones: reached - (await countRewarded()) };
 }
+
+// Fixed lookup: the filter is never interpolated from the caller's string.
+const COUPON_STATUS_FILTER = {
+  AVAILABLE: 'WHERE redeemed_order_id IS NULL',
+  REDEEMED: 'WHERE redeemed_order_id IS NOT NULL',
+} as const;
+
+/** One statement, so one snapshot; no transaction needed. */
+export async function listCoupons(pool: pg.Pool, status?: keyof typeof COUPON_STATUS_FILTER) {
+  const { rows } = await pool.query<CouponRow>(
+    `SELECT code, percent, milestone, milestone_order_id, source, redeemed_order_id, created_at, redeemed_at
+       FROM coupons ${status === undefined ? '' : COUPON_STATUS_FILTER[status]} ORDER BY milestone`,
+  );
+  return rows.map(toCoupon);
+}
+
+export async function listOrders(pool: pg.Pool) {
+  const { rows } = await pool.query<{
+    id: string;
+    placement_number: number;
+    subtotal_paise: number;
+    discount_paise: number;
+    total_paise: number;
+    coupon_code: string | null;
+    created_at: Date;
+  }>(
+    `SELECT id, placement_number, subtotal_paise, discount_paise, total_paise, coupon_code, created_at
+       FROM orders ORDER BY placement_number`,
+  );
+  return rows.map((o) => ({
+    id: o.id,
+    placementNumber: o.placement_number,
+    subtotalPaise: o.subtotal_paise,
+    discountPaise: o.discount_paise,
+    totalPaise: o.total_paise,
+    couponCode: o.coupon_code,
+    createdAt: o.created_at.toISOString(),
+    currency: 'INR' as const,
+  }));
+}

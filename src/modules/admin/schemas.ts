@@ -17,3 +17,19 @@ export const GenerateCouponResponse = Type.Object({
   coupon: Coupon,
   pendingMilestones: Type.Integer(),
 });
+
+export const CouponListQuery = Type.Object(
+  { status: Type.Optional(Type.Union([Type.Literal('AVAILABLE'), Type.Literal('REDEEMED')])) },
+  { additionalProperties: false },
+);
+
+export const AdminOrder = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  placementNumber: Type.Integer(),
+  subtotalPaise: Type.Integer(),
+  discountPaise: Type.Integer(),
+  totalPaise: Type.Integer(),
+  couponCode: Type.Union([Type.String(), Type.Null()]),
+  createdAt: Type.String({ format: 'date-time' }),
+  currency: Type.Literal('INR'),
+});

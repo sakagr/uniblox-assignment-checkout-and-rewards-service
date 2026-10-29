@@ -94,3 +94,72 @@ describe('POST /admin/coupons', () => {
 
   it('keeps the invariants', () => expectInvariants(ctx.pool));
 });
+
+describe('GET /admin/coupons', () => {
+  let redeemedCode: string;
+  let redeemedOrderId: string;
+
+  it('lists every coupon by milestone, then filters by status', async () => {
+    const all0 = (await ctx.app.inject({ method: 'GET', url: '/admin/coupons' })).json();
+    expect(all0.map((c: { milestone: number }) => c.milestone)).toEqual([1, 2]);
+    redeemedCode = all0[0].code;
+
+    // Spend the milestone-1 coupon on a new order.
+    const cartId = await cartWith(ctx.app, ['sku-sticker-pack', 1]);
+    const quote = await requestQuote(ctx.app, cartId, redeemedCode);
+    expect(quote.statusCode).toBe(201);
+    const placed = await confirm(ctx.app, cartId, quote.json().quoteId);
+    expect(placed.statusCode).toBe(201);
+    redeemedOrderId = placed.json().order.id;
+    orderIds.push(redeemedOrderId);
+
+    const all = (await ctx.app.inject({ method: 'GET', url: '/admin/coupons' })).json();
+    expect(all).toHaveLength(2);
+    expect(all[0]).toMatchObject({
+      code: redeemedCode,
+      milestone: 1,
+      percent: 10,
+      source: 'ADMIN',
+      status: 'REDEEMED',
+      milestoneOrderId: orderIds[1],
+      redeemedOrderId,
+    });
+    expect(all[0].redeemedAt).toEqual(expect.any(String));
+    expect(all[1]).toMatchObject({ milestone: 2, status: 'AVAILABLE', redeemedOrderId: null, redeemedAt: null });
+
+    const redeemed = (await ctx.app.inject({ method: 'GET', url: '/admin/coupons?status=REDEEMED' })).json();
+    expect(redeemed.map((c: { milestone: number }) => c.milestone)).toEqual([1]);
+    const available = (await ctx.app.inject({ method: 'GET', url: '/admin/coupons?status=AVAILABLE' })).json();
+    expect(available.map((c: { milestone: number }) => c.milestone)).toEqual([2]);
+  });
+
+  it('400s an unknown status and an unknown query parameter', async () => {
+    for (const url of ['/admin/coupons?status=bogus', '/admin/coupons?foo=1']) {
+      const res = await ctx.app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(400);
+      expect(res.json().error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+});
+
+describe('GET /admin/orders', () => {
+  it('lists orders by placement number with their totals and coupon', async () => {
+    const res = await ctx.app.inject({ method: 'GET', url: '/admin/orders' });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json();
+    expect(rows.map((o: { placementNumber: number }) => o.placementNumber)).toEqual([1, 2, 3, 4, 5]);
+    expect(rows.map((o: { id: string }) => o.id)).toEqual(orderIds);
+
+    for (const o of rows) {
+      expect(o.currency).toBe('INR');
+      expect(o.totalPaise).toBe(o.subtotalPaise - o.discountPaise);
+    }
+    // Only the order that spent the milestone-1 coupon carries a code and a discount.
+    expect(rows.filter((o: { couponCode: string | null }) => o.couponCode !== null)).toHaveLength(1);
+    expect(rows[4]).toMatchObject({ subtotalPaise: 9900, discountPaise: 990, totalPaise: 8910 });
+    expect(rows[4].couponCode).toEqual(expect.any(String));
+    expect(rows[0]).toMatchObject({ couponCode: null, discountPaise: 0 });
+  });
+
+  it('keeps the invariants', () => expectInvariants(ctx.pool));
+});

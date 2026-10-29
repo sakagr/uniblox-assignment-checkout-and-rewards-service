@@ -20,7 +20,7 @@ Tasks for the checkout and rewards service, in the order they are done. Work on 
 | 5 | Products and carts | 40 min | ✅ Done |
 | 6 | Checkout quote | 30 min | ✅ Done |
 | 7 | Place orders (confirm checkout) | 75 min | ✅ Done |
-| 8 | Admin coupons and order list | 30 min | ⬜ |
+| 8 | Admin coupons and order list | 30 min | ✅ Done |
 | 9 | Admin report | 20 min | ⬜ |
 | 10 | Harden with concurrency tests | 50 min | ⬜ |
 | 11 | Write the README and API docs | 30 min | ⬜ |
@@ -142,18 +142,18 @@ Turn a quote into an order exactly as quoted. This is the core of the assignment
   - T11: auto coupon on the nth order
 - [x] Committed in increments (happy path first, then each failure mode with its test)
 
-## 8. Admin coupons and order list
+## 8. Admin coupons and order list ✅
 
 Give the administrator manual coupon generation (a backfill for missed milestones) and listing endpoints for reconciliation.
 
 **Done when**
 - [x] `POST /admin/coupons` follows §6.4: locks the counter, picks the lowest unrewarded milestone, links it to the milestone order, returns `pendingMilestones`; 409 `NO_ELIGIBLE_MILESTONE` with details otherwise
-- [ ] `GET /admin/coupons?status=` and `GET /admin/orders`
-- [ ] Tests pass:
+- [x] `GET /admin/coupons?status=` and `GET /admin/orders`
+- [x] Tests pass:
   - [x] T12: 10 parallel generate calls with auto-generation off give exactly one coupon per milestone
   - [x] T11 remainder: after an auto-generated coupon, `POST /admin/coupons` returns 409 `NO_ELIGIBLE_MILESTONE` (the part of T11 that needs this endpoint)
   - [x] With auto-generation off, an admin backfill of a milestone makes `GET /orders/:id` for the milestone order show `earnedCoupon` (it was `null` before; task 7 pins the `null` side)
-- [ ] Committed
+- [x] Committed
 
 ## 9. Admin report
 
