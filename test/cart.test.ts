@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createTestApp, parallel, setupTestDb } from './helpers.js';
+import { createTestApp, expectInvariants, parallel, setupTestDb, waitForLockWaiters } from './helpers.js';
 
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
 
@@ -102,6 +102,17 @@ describe('T2: invalid input is rejected and the cart is unchanged', () => {
     expect((await getCart(cartId)).version).toBe(0);
   });
 
+  it('PUT quantity 0 on an unknown product is 404, while DELETE of it is a 200 no-op', async () => {
+    const cartId = await newCart();
+    const res = await putQty(cartId, 'sku-nope', 0);
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('PRODUCT_NOT_FOUND');
+
+    const deleted = await del(cartId, 'sku-nope');
+    expect(deleted.statusCode).toBe(200);
+    expect((await getCart(cartId)).version).toBe(0);
+  });
+
   it('409s a quantity above stock with the shortfall, cart unchanged', async () => {
     const cartId = await newCart();
     const res = await putQty(cartId, 'sku-limited-sneaker', 3);
@@ -201,5 +212,42 @@ describe('concurrent item edits', () => {
     expect(cart.version).toBe(6);
     const db = await ctx.pool.query('SELECT version FROM carts WHERE id = $1', [cartId]);
     expect(db.rows[0].version).toBe(6);
+  });
+
+  // The parallel-PUT test above passes even without the cart lock: the version increment is
+  // atomic and different products don't conflict. This one pins I4 by holding the lock itself.
+  it('I4: a PUT waits for an in-flight checkout of the cart, then 409s and leaves the line alone', async () => {
+    const cartId = await newCart();
+    await putQty(cartId, 'sku-mug', 1);
+
+    // A separate connection plays a confirm in flight: cart locked, status flipped, not yet committed.
+    const blocker = await ctx.pool.connect();
+    let committed = false;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT 1 FROM carts WHERE id = $1 FOR UPDATE', [cartId]);
+      await blocker.query("UPDATE carts SET status = 'CHECKED_OUT' WHERE id = $1", [cartId]);
+
+      // inject() is lazy; Promise.resolve() calls .then() and so dispatches the request now.
+      const pending = Promise.resolve(putQty(cartId, 'sku-mug', 3));
+      await waitForLockWaiters(ctx.pool, 1);
+
+      await blocker.query('COMMIT');
+      committed = true;
+      const res = await pending;
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe('CART_ALREADY_CHECKED_OUT');
+    } finally {
+      if (!committed) await blocker.query('ROLLBACK');
+      blocker.release();
+    }
+
+    const line = await ctx.pool.query('SELECT quantity FROM cart_items WHERE cart_id = $1 AND product_id = $2', [
+      cartId,
+      'sku-mug',
+    ]);
+    expect(line.rows).toEqual([{ quantity: 1 }]);
+    expect((await ctx.pool.query('SELECT version FROM carts WHERE id = $1', [cartId])).rows[0].version).toBe(1);
+    await expectInvariants(ctx.pool);
   });
 });

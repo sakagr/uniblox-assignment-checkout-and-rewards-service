@@ -47,6 +47,26 @@ export function parallel<T>(n: number, fn: (index: number) => Promise<T>): Promi
 }
 
 /**
+ * Resolves once at least `n` backends in this database are waiting on a lock, so a race test
+ * can set up an exact interleaving (start the request, wait until it is blocked, release the
+ * blocker) instead of sleeping. Throws with the count it last saw after `timeoutMs`.
+ */
+export async function waitForLockWaiters(pool: pg.Pool, n: number, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let waiting = 0;
+  for (;;) {
+    const { rows } = await pool.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    waiting = rows[0]!.waiting;
+    if (waiting >= n) return;
+    if (Date.now() >= deadline) throw new Error(`waitForLockWaiters: ${waiting} of ${n} waiters after ${timeoutMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+/**
  * Inserts a coherent order directly, in one transaction and in the D9 lock
  * order: one `sku-sticker-pack` line at its current price, totals from
  * `calculateTotals()`, the matching quote and quote line, and that product's

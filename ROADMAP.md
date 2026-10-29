@@ -172,23 +172,23 @@ Prove the invariants hold under heavy overlap, and prove the tests would catch a
 
 **Done when**
 - [x] Invariant checker (T15) in `test/helpers.ts`, run at the end of every concurrency test
-- [ ] `waitForLockWaiters(pool, n)` in `test/helpers.ts`:
+- [x] `waitForLockWaiters(pool, n)` in `test/helpers.ts`:
   - polls `pg_stat_activity` until `n` backends have `wait_event_type = 'Lock'`, with a timeout
   - lets race tests set up an exact interleaving instead of sleeping
   - if task 7 needs it first, build it there and tick this item then
 - [ ] Tests pass:
-  - T13: 20 parallel confirms with n = 5 give placement numbers 1..20 with no gaps, and exactly 4 coupons on orders 5/10/15/20
-  - **Cart lock (I4), deterministic:**
+  - [ ] T13: 20 parallel confirms with n = 5 give placement numbers 1..20 with no gaps, and exactly 4 coupons on orders 5/10/15/20
+  - [x] **Cart lock (I4), deterministic:**
     - a separate connection opens a transaction, locks the cart `FOR UPDATE`, and sets it to `CHECKED_OUT` (simulating an in-flight confirm)
     - a `PUT` on that cart is started and confirmed blocked with `waitForLockWaiters`
     - the blocker commits; the `PUT` returns 409 `CART_ALREADY_CHECKED_OUT` and the line is unchanged
     - why this test exists: the task 5 parallel-PUT test passes even without the cart lock (the version increment is atomic and different products don't conflict), so it doesn't prove I4
-  - `PUT` with `quantity: 0` on an unknown product returns 404 `PRODUCT_NOT_FOUND` (pins the documented PUT-0 vs DELETE asymmetry; DELETE returns a 200 no-op)
+  - [x] `PUT` with `quantity: 0` on an unknown product returns 404 `PRODUCT_NOT_FOUND` (pins the documented PUT-0 vs DELETE asymmetry; DELETE returns a 200 no-op)
 - [ ] Fix the `bumpVersion` doc comment in `src/modules/carts/service.ts`: it bumps unconditionally, and the caller checks `rowCount`
 - [x] Note in the `insertCouponFixture` doc comment that its milestones are not aligned with placement k × n, so it must not be used in admin-generation tests (task 8)
 - [ ] Fix the `export const CartLine =Type.Object(` spacing in `src/modules/carts/schemas.ts`
 - [ ] Sanity checks, done locally and not committed. For each, break the guard, confirm the named test fails, then restore it:
-  - [ ] remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail. Still to do: the T4 run in task 7 covers confirm's cart lock, not item edits
+  - [x] remove `FOR UPDATE` from `lockOpenCart`: the cart-lock (I4) test must fail. **The I4 test failed** (the PUT returned 200 instead of 409; the other 16 tests in `cart.test.ts` still passed, which is the point of the test). The T4 run in task 7 covers confirm's cart lock, not item edits
   - [x] remove `AND redeemed_order_id IS NULL` from the coupon redeem: **T6 failed**, as intended (done in task 7)
   - [x] remove **both** stock defences in confirm (the under-lock stock check and `AND stock >= $qty`): **T5 failed**, as intended (done in task 7)
   - [x] swap the PRICE_CHANGED and INSUFFICIENT_STOCK checks: the precedence test ("reports PRICE_CHANGED before INSUFFICIENT_STOCK when both apply") failed, as intended (done in task 7)
