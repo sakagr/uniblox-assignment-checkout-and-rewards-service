@@ -25,7 +25,7 @@ If code and spec disagree, the spec wins until the human approves a change.
 
 ## Stack
 
-- TypeScript (strict, ESM, Node ≥ 20.6).
+- TypeScript (strict, ESM, Node ≥ 20.12).
 - Fastify 5 with the TypeBox type provider, `@fastify/swagger` and `@fastify/swagger-ui`.
 - PostgreSQL 16 via docker-compose (OrbStack on macOS), accessed with raw `pg`.
 - Vitest.
@@ -42,6 +42,9 @@ npm run db:psql          # psql inside the container
 npm run typecheck
 npm test                 # vitest run (needs Postgres up)
 npm run dev              # tsx watch src/server.ts
+npm run up               # build and start db + app in containers (migrates on start)
+npm run down             # stop the containers (keeps the volume)
+npm run test:docker      # run the suite inside the app container
 ```
 
 ## Rules that protect the invariants

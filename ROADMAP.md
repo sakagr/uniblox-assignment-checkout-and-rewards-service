@@ -241,6 +241,12 @@ Bring the decision record in line with what was actually built. This document is
 - [ ] Correct the D6 and §4 wording on the counter lock (propose the edits, per AGENTS.md):
   - MVCC visibility is what stops admin pre-empting an in-flight milestone confirm: admin sees only committed placements
   - the counter lock serializes admin calls into clean 409s, and makes admin wait for in-flight confirms
+- [ ] A DECISIONS entry for the container runtime (task 11 commit `build: run the app in a container`):
+  - tsx in the image rather than compiled `dist/`: `tsc` emits `migrate.js` under `dist/src/db`, where the `../../migrations/` lookup resolves to the wrong place
+  - devDependencies kept in the image, so tsx can run the app and vitest can run the suite in the container (`npm run test:docker`)
+  - migrations run on every container start; safe because they hold a Postgres advisory lock and are idempotent (`schema_migrations`)
+  - `exec` into tsx with `init: true`, not `npm start`, so SIGTERM reaches the server and graceful shutdown runs (stop measured at ~0.3s, exit 0)
+  - the lockfile is portable: the suite passed as `linux/amd64` (vite 8 bundles with Rolldown, not Rollup; its `@rolldown/binding-linux-*-musl` and the `esbuild` Linux packages are in the lockfile)
 - [ ] Approximate time spent filled in
 - [ ] Committed
 
